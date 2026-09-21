@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- Fake-only overlay.  No RH56F1 real backend exists at this stage. -->
+  <xacro:macro name="openarm_rh56f1_bimanual_ros2_control"
+               params="hand_configuration state_policy">
+    <ros2_control name="openarm_rh56f1_fake_system" type="system">
+      <hardware>
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="fake_sensor_commands">false</param>
+        <param name="state_following_offset">0.0</param>
+      </hardware>
+
+      <xacro:macro name="fake_control_joint" params="name initial_position:=0.0">
+        <joint name="${name}">
+          <command_interface name="position"/>
+          <state_interface name="position">
+            <param name="initial_value">${initial_position}</param>
+          </state_interface>
+        </joint>
+      </xacro:macro>
+
+      <!-- Canonical manifest order: right arm, right hand, left arm, left hand. -->
+      <xacro:fake_control_joint name="r_aj_1"/>
+      <xacro:fake_control_joint name="r_aj_2"/>
+      <xacro:fake_control_joint name="r_aj_3"/>
+      <xacro:fake_control_joint name="r_aj_4"/>
+      <xacro:fake_control_joint name="r_aj_5"/>
+      <xacro:fake_control_joint name="r_aj_6"/>
+      <xacro:fake_control_joint name="r_aj_7"/>
+
+      <!--
+        Parked is a fake-only zero pose. Zero is within every canonical hand
+        actuator limit. There is deliberately no hand controller, so these
+        command interfaces remain unclaimed. Mimic/passive joints are not
+        ros2_control resources and follow the canonical URDF mimic tags.
+      -->
+      <xacro:if
+        value="${state_policy == 'parked' and (hand_configuration == 'right' or hand_configuration == 'both')}">
+        <xacro:fake_control_joint name="r_hj_thumb_1"/>
+        <xacro:fake_control_joint name="r_hj_thumb_2"/>
+        <xacro:fake_control_joint name="r_hj_index_1"/>
+        <xacro:fake_control_joint name="r_hj_middle_1"/>
+        <xacro:fake_control_joint name="r_hj_ring_1"/>
+        <xacro:fake_control_joint name="r_hj_pinky_1"/>
+      </xacro:if>
+
+      <xacro:fake_control_joint name="l_aj_1"/>
+      <xacro:fake_control_joint name="l_aj_2"/>
+      <xacro:fake_control_joint name="l_aj_3"/>
+      <xacro:fake_control_joint name="l_aj_4"/>
+      <xacro:fake_control_joint name="l_aj_5"/>
+      <xacro:fake_control_joint name="l_aj_6"/>
+      <xacro:fake_control_joint name="l_aj_7"/>
+
+      <xacro:if
+        value="${state_policy == 'parked' and (hand_configuration == 'left' or hand_configuration == 'both')}">
+        <xacro:fake_control_joint name="l_hj_thumb_1"/>
+        <xacro:fake_control_joint name="l_hj_thumb_2"/>
+        <xacro:fake_control_joint name="l_hj_index_1"/>
+        <xacro:fake_control_joint name="l_hj_middle_1"/>
+        <xacro:fake_control_joint name="l_hj_ring_1"/>
+        <xacro:fake_control_joint name="l_hj_pinky_1"/>
+      </xacro:if>
+    </ros2_control>
+  </xacro:macro>
+</robot>

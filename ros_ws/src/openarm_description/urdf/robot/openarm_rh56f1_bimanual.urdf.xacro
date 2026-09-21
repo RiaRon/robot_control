@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="openarm_rh56f1_control">
+  <!--
+    canonical_urdf is a selected-hand temporary variant derived from
+    generated/rl/openarm_rh56f1_bi_rl.urdf.  It owns every geometry and
+    kinematic value; this wrapper only adds the control overlay.
+  -->
+  <xacro:arg name="canonical_urdf" default=""/>
+  <xacro:arg name="control_xacro" default=""/>
+  <xacro:arg name="hand_configuration" default="both"/>
+  <xacro:arg name="rh56f1_state_policy" default="parked"/>
+  <xacro:arg name="use_fake_hardware" default="true"/>
+
+  <xacro:include filename="$(arg canonical_urdf)"/>
+  <xacro:include filename="$(arg control_xacro)"/>
+
+  <xacro:if value="$(arg use_fake_hardware)">
+    <xacro:openarm_rh56f1_bimanual_ros2_control
+      hand_configuration="$(arg hand_configuration)"
+      state_policy="$(arg rh56f1_state_policy)"/>
+  </xacro:if>
+</robot>
