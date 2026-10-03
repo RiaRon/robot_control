@@ -1,0 +1,101 @@
+# Quest controller -> OpenArm arm teleoperation. Read by ros_bridge, ros_teleop,
+# monitor and synth. Every value can be overridden on the command line.
+
+quest:
+  udp:
+    host: 0.0.0.0          # address this PC listens on
+    port: 5006             # the Quest app's default
+  # Poses are published in this frame: Unity world re-expressed in the ROS
+  # convention (x forward, y left, z up). It is not connected to the robot's
+  # TF tree; the teleop uses only motion relative to the enable instant.
+  frame_id: quest_world
+  publish_rate_hz: 200     # upper bound; a packet is published once, when new
+  smoothing:               # upstream One Euro filter, optional
+    enabled: false
+    min_cutoff: 2.0
+    beta: 0.04
+    d_cutoff: 1.5
+    max_linear_speed: 1.0
+    max_angular_speed: 6.0
+  topics:
+    left: {pose: /quest/left/pose, joy: /quest/left/joy}
+    right: {pose: /quest/right/pose, joy: /quest/right/joy}
+    reference_pose: /quest/reference/pose
+    status: /quest/status
+
+teleop:
+  profile: openarm_rh56f1  # robot_control profile: joint names, order, limits
+  joint_states_topic: /joint_states
+  robot_description_topic: /robot_description
+  status_topic_prefix: /quest_teleop   # /quest_teleop/<arm>/status, .../target_pose
+  input_timeout_sec: 0.2
+  joint_state_timeout_sec: 0.2
+  enable:
+    source: grip           # grip | trigger | button_primary | button_secondary
+    press_threshold: 0.7
+    release_threshold: 0.3
+  position_scale: 1.0
+  # Rows are the robot base axes written in quest_world axes. Identity means
+  # controller forward/left/up moves the palm along base +x/+y/+z.
+  axis_mapping:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    - [0.0, 0.0, 1.0]
+  heading:
+    # world: quest_world's forward is the robot's forward (recenter the Quest
+    #   facing the way the robot faces, or set yaw_offset_deg).
+    # reference: forward is the heading of the packet's rf pose at enable.
+    mode: world
+    yaw_offset_deg: 0.0
+  orientation_mode: hold   # hold: keep the palm orientation it had at enable
+                           # relative: also follow the controller's rotation
+  max_target_offset_m: 0.4 # palm target is kept within this distance of its
+                           # pose at enable
+  # Enabling is refused at a singular arm pose (e.g. hanging straight down);
+  # 0 disables the check.
+  min_enable_singular_value: 0.0
+  max_input_jump_m: 0.1
+  max_input_jump_rad: 0.5
+  stream_horizon_sec: 0.0  # time_from_start of each streamed point
+  ik:
+    max_iterations: 30
+    position_tolerance_m: 0.001
+    rotation_tolerance_rad: 0.01
+    damping: 0.05
+    max_iteration_step_rad: 0.1
+    max_seed_distance_rad: 0.5
+  arms:
+    right:
+      group: rh56f1_right_arm
+      control_frame: r_hl_palm_sensor
+      quest_side: right
+    left:
+      group: rh56f1_left_arm
+      control_frame: l_hl_palm_sensor
+      quest_side: left
+  # Where each bringup serves an arm: its trajectory controller, the arm joint
+  # states the teleop reads, and the controller manager whose
+  # robot_description parameter (the description it actually loaded) is used
+  # for the joint names and the fake/real hardware check.
+  #   fake, real       split bringup: openarm_rh56f1_arms.launch.py runtime:=fake|real
+  #                    (arms under /controller_manager, arm joint states on
+  #                    /openarm/joint_states, never waiting for a hand)
+  #   fake_integrated  the earlier single-manager fake bringup,
+  #                    openarm.rh56f1_bimanual.launch.py
+  runtimes:
+    fake:
+      controllers:
+        right: right_joint_trajectory_controller
+        left: left_joint_trajectory_controller
+      joint_states_topic: /openarm/joint_states
+      controller_manager: /controller_manager
+    real:
+      controllers: profile
+      joint_states_topic: /openarm/joint_states
+      controller_manager: /controller_manager
+    fake_integrated:
+      controllers:
+        right: right_joint_trajectory_controller
+        left: left_joint_trajectory_controller
+      joint_states_topic: /joint_states
+      controller_manager: /controller_manager

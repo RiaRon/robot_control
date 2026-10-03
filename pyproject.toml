@@ -21,6 +21,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 robot_control = ["profiles/*.yaml"]
+openarm_quest_teleop = ["config/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
