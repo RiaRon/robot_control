@@ -1,0 +1,148 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Real-hardware ros2_control overlay for OpenArm + RH56F1: four independent
+    hardware components (right/left OpenArmHW, right/left Rh56f1HW) under one
+    controller_manager. Joint names and position limits come from the rendered
+    control contract (the runtime URDF); safety values from
+    config/rh56f1/real_bringup_safety.yaml. Nothing else carries a number.
+  -->
+  <xacro:macro name="openarm_rh56f1_bimanual_real_ros2_control"
+               params="contract_file
+                       right_can_interface left_can_interface can_fd
+                       enable_right_arm enable_left_arm hand_configuration
+                       right_hand_transport left_hand_transport
+                       right_hand_port left_hand_port
+                       right_hand_baudrate left_hand_baudrate
+                       right_hand_device_id left_hand_device_id">
+    <xacro:property name="contract" value="${xacro.load_yaml(contract_file)}"/>
+    <xacro:property name="safety"
+                    value="${xacro.load_yaml('$(find openarm_description)/config/rh56f1/real_bringup_safety.yaml')}"/>
+    <xacro:property name="control_gains"
+                    value="${xacro.load_yaml('$(find openarm_description)/config/arm/v10/control_gains.yaml')}"/>
+
+    <xacro:macro name="rh56f1_real_arm_joint" params="entry">
+      <joint name="${entry['name']}">
+        <command_interface name="position">
+          <param name="min">${entry['lower']}</param>
+          <param name="max">${entry['upper']}</param>
+        </command_interface>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+        <state_interface name="temperature_rotor"/>
+        <state_interface name="temperature_mos"/>
+      </joint>
+    </xacro:macro>
+
+    <xacro:macro name="rh56f1_real_arm" params="side can_interface">
+      <xacro:property name="arm" value="${contract['arms'][side]}"/>
+      <ros2_control name="openarm_rh56f1_${side}_arm" type="system">
+        <hardware>
+          <plugin>openarm_hardware/OpenArmHW</plugin>
+          <param name="can_interface">${can_interface}</param>
+          <param name="arm_prefix">${side}_</param>
+          <param name="hand">false</param>
+          <param name="can_fd">${can_fd}</param>
+          <param name="auto_return_to_zero">${safety['arm']['auto_return_to_zero']}</param>
+          <param name="verify_state_before_enable">${safety['arm']['verify_state_before_enable']}</param>
+          <param name="min_inactive_sec_before_activate">${safety['arm']['min_inactive_sec_before_activate']}</param>
+          <param name="state_stale_timeout_sec">${safety['arm']['state_stale_timeout_sec']}</param>
+          <param name="kp1">${control_gains['joint1']['kp']}</param>
+          <param name="kp2">${control_gains['joint2']['kp']}</param>
+          <param name="kp3">${control_gains['joint3']['kp']}</param>
+          <param name="kp4">${control_gains['joint4']['kp']}</param>
+          <param name="kp5">${control_gains['joint5']['kp']}</param>
+          <param name="kp6">${control_gains['joint6']['kp']}</param>
+          <param name="kp7">${control_gains['joint7']['kp']}</param>
+          <param name="kd1">${control_gains['joint1']['kd']}</param>
+          <param name="kd2">${control_gains['joint2']['kd']}</param>
+          <param name="kd3">${control_gains['joint3']['kd']}</param>
+          <param name="kd4">${control_gains['joint4']['kd']}</param>
+          <param name="kd5">${control_gains['joint5']['kd']}</param>
+          <param name="kd6">${control_gains['joint6']['kd']}</param>
+          <param name="kd7">${control_gains['joint7']['kd']}</param>
+        </hardware>
+        <!-- Numeric order 1..7: OpenArmHW exports openarm_<side>_joint1..7. -->
+        <xacro:rh56f1_real_arm_joint entry="${arm[0]}"/>
+        <xacro:rh56f1_real_arm_joint entry="${arm[1]}"/>
+        <xacro:rh56f1_real_arm_joint entry="${arm[2]}"/>
+        <xacro:rh56f1_real_arm_joint entry="${arm[3]}"/>
+        <xacro:rh56f1_real_arm_joint entry="${arm[4]}"/>
+        <xacro:rh56f1_real_arm_joint entry="${arm[5]}"/>
+        <xacro:rh56f1_real_arm_joint entry="${arm[6]}"/>
+      </ros2_control>
+    </xacro:macro>
+
+    <xacro:macro name="rh56f1_real_hand_joint" params="entry">
+      <joint name="${entry['name']}">
+        <command_interface name="position">
+          <param name="min">${entry['lower']}</param>
+          <param name="max">${entry['upper']}</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+        <state_interface name="current"/>
+        <state_interface name="temperature"/>
+        <state_interface name="comm_ok"/>
+        <state_interface name="fault"/>
+        <state_interface name="command_clamped"/>
+        <state_interface name="is_mock"/>
+        <state_interface name="writes"/>
+      </joint>
+    </xacro:macro>
+
+    <xacro:macro name="rh56f1_real_hand" params="side transport port baudrate device_id">
+      <xacro:property name="hand" value="${contract['hands'][side]}"/>
+      <ros2_control name="rh56f1_${side}_hand" type="system">
+        <hardware>
+          <plugin>rh56f1_hardware/Rh56f1HW</plugin>
+          <param name="side">${side}</param>
+          <param name="transport">${transport}</param>
+          <param name="port">${port}</param>
+          <param name="baudrate">${baudrate}</param>
+          <param name="device_id">${device_id}</param>
+          <param name="actuator_thumb_1">${hand['thumb_1']['name']}</param>
+          <param name="actuator_thumb_2">${hand['thumb_2']['name']}</param>
+          <param name="actuator_index_1">${hand['index_1']['name']}</param>
+          <param name="actuator_middle_1">${hand['middle_1']['name']}</param>
+          <param name="actuator_ring_1">${hand['ring_1']['name']}</param>
+          <param name="actuator_pinky_1">${hand['pinky_1']['name']}</param>
+          <param name="max_velocity_rad_s">${safety['hand']['max_velocity_rad_s']}</param>
+          <param name="max_step_rad">${safety['hand']['max_step_rad']}</param>
+          <param name="min_write_period_sec">${safety['hand']['min_write_period_sec']}</param>
+          <param name="state_poll_period_sec">${safety['hand']['state_poll_period_sec']}</param>
+          <param name="stale_timeout_sec">${safety['hand']['stale_timeout_sec']}</param>
+          <param name="min_inactive_sec_before_activate">${safety['hand']['min_inactive_sec_before_activate']}</param>
+          <param name="min_fresh_reads_to_activate">${safety['hand']['min_fresh_reads_to_activate']}</param>
+        </hardware>
+        <xacro:rh56f1_real_hand_joint entry="${hand['thumb_1']}"/>
+        <xacro:rh56f1_real_hand_joint entry="${hand['thumb_2']}"/>
+        <xacro:rh56f1_real_hand_joint entry="${hand['index_1']}"/>
+        <xacro:rh56f1_real_hand_joint entry="${hand['middle_1']}"/>
+        <xacro:rh56f1_real_hand_joint entry="${hand['ring_1']}"/>
+        <xacro:rh56f1_real_hand_joint entry="${hand['pinky_1']}"/>
+      </ros2_control>
+    </xacro:macro>
+
+    <xacro:if value="${enable_right_arm}">
+      <xacro:rh56f1_real_arm side="right" can_interface="${right_can_interface}"/>
+    </xacro:if>
+    <xacro:if value="${enable_left_arm}">
+      <xacro:rh56f1_real_arm side="left" can_interface="${left_can_interface}"/>
+    </xacro:if>
+    <xacro:if value="${hand_configuration in ('right', 'both')}">
+      <xacro:rh56f1_real_hand side="right" transport="${right_hand_transport}"
+                              port="${right_hand_port}" baudrate="${right_hand_baudrate}"
+                              device_id="${right_hand_device_id}"/>
+    </xacro:if>
+    <xacro:if value="${hand_configuration in ('left', 'both')}">
+      <xacro:rh56f1_real_hand side="left" transport="${left_hand_transport}"
+                              port="${left_hand_port}" baudrate="${left_hand_baudrate}"
+                              device_id="${left_hand_device_id}"/>
+    </xacro:if>
+  </xacro:macro>
+</robot>

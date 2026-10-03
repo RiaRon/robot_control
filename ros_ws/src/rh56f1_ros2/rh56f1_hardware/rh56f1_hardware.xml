@@ -1,0 +1,11 @@
+<library path="rh56f1_hardware">
+  <class name="rh56f1_hardware/Rh56f1HW"
+         type="rh56f1_hardware::Rh56f1HW"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      ros2_control hardware interface for one RH56F1 hand (6 actuators:
+      thumb1, thumb2, index1, middle1, ring1, pinky1). Instantiate once per
+      side (left/right), each with its own `side` and transport parameters.
+    </description>
+  </class>
+</library>

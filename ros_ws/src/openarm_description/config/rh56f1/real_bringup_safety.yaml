@@ -1,0 +1,39 @@
+# Safety values for the OpenArm + RH56F1 real bringup
+# (openarm_rh56f1.bimanual.real.ros2_control.xacro). The only place these
+# numbers live; joint position limits are not here, they are rendered from the
+# canonical URDF.
+
+arm:
+  # Never move on activation.
+  auto_return_to_zero: false
+  # Probe every motor with a disable command (never energizes) and require its
+  # reply before enabling, as openarm_can's own motor-status check does.
+  verify_state_before_enable: true
+  # Explicit-activation gate: controller_manager auto-activates right after
+  # configure when no hardware_components_initial_state is given; activation
+  # sooner than this after configure is refused.
+  min_inactive_sec_before_activate: 2.0
+  # components/openarm.yaml safety.watchdog_sec.
+  state_stale_timeout_sec: 0.25
+
+hand:
+  # OpenArm-Tesollo profile (robot_control@dcff2a5,
+  # src/robot_control/profiles/openarm_tesollo.yaml): every hand joint
+  # velocity 2.0 rad/s at command_rate_hz 100, and CommandGate's per-command
+  # step velocity * max(elapsed, 1/rate) (src/robot_control/safety.py@aff7e3a)
+  # = 0.02 rad. The plugin applies both per device write:
+  # step = min(2.0 * elapsed, 0.02) rad, so at the 0.1 s write period below the
+  # effective rate is 0.2 rad/s, slower than Tesollo's.
+  max_velocity_rad_s: 2.0
+  max_step_rad: 0.02
+  # UNVERIFIED placeholders, NOT RH56F1 values: 10 Hz device writes, 50 Hz
+  # state polls, 0.25 s staleness (components/rh56f1.yaml safety.watchdog_sec).
+  # Stage 5A found no command/poll period, timeout or watchdog in the official
+  # manual (docs/rh56f1-protocol-evidence.md); max_velocity_rad_s/max_step_rad
+  # above are Tesollo-derived placeholders too. Real hands stay NO-GO.
+  min_write_period_sec: 0.1
+  state_poll_period_sec: 0.02
+  stale_timeout_sec: 0.25
+  # Explicit-activation gate, as for the arm, plus fresh state before arming.
+  min_inactive_sec_before_activate: 2.0
+  min_fresh_reads_to_activate: 3

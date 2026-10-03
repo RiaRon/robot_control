@@ -1,0 +1,72 @@
+name: openarm_rh56f1
+components: [openarm, rh56f1]
+asset:
+  # The canonical bimanual OpenArm + RH56F1 model. Its control_joint_order is
+  # right arm(7) + right hand(6) + left arm(7) + left hand(6) = 26, which the
+  # `joints:` list below reproduces in the same order; source names are its
+  # source_to_canonical_joints entries (tests/test_profile_rh56f1.py).
+  id: openarm_rh56f1_bi_rl
+  manifest: ../../../../urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml
+  manifest_sha256: fc72ad75a1231b203f9d101a572ecbdbe5cd6281f51f44575368d2ba82c15780
+  urdf: ../../../../urdf/generated/rl/openarm_rh56f1_bi_rl.urdf
+ros:
+  # command_rate_hz sets CommandGate's per-command step (velocity / rate):
+  # 100 Hz with 2.0 rad/s gives 0.02 rad per command, the same as the
+  # OpenArm-Tesollo profile. The real bringup serves no canonical topic or
+  # controller, so none is named here.
+  humble:
+    command_rate_hz: 100
+  jazzy:
+    command_rate_hz: 100
+# One controller per device, all under the one controller_manager of the real
+# bringup, so every joint is published once on /joint_states and no group
+# overrides state_topic.
+groups:
+  rh56f1_right_arm:
+    joints: [r_aj_1, r_aj_2, r_aj_3, r_aj_4, r_aj_5, r_aj_6, r_aj_7]
+    controller: rh56f1_right_arm_controller
+    # Canonical palm control frame; documentation only (no IK in this stage).
+    asset_tip_link: r_hl_palm_sensor
+  rh56f1_left_arm:
+    joints: [l_aj_1, l_aj_2, l_aj_3, l_aj_4, l_aj_5, l_aj_6, l_aj_7]
+    controller: rh56f1_left_arm_controller
+    asset_tip_link: l_hl_palm_sensor
+  rh56f1_right_hand:
+    joints: [r_hj_thumb_1, r_hj_thumb_2, r_hj_index_1, r_hj_middle_1, r_hj_ring_1, r_hj_pinky_1]
+    controller: rh56f1_right_hand_controller
+  rh56f1_left_hand:
+    joints: [l_hj_thumb_1, l_hj_thumb_2, l_hj_index_1, l_hj_middle_1, l_hj_ring_1, l_hj_pinky_1]
+    controller: rh56f1_left_hand_controller
+# Declaration order is the 26-D canonical vector order (CanonicalInterface
+# takes it from here). Position limits equal the canonical URDF's; velocity is
+# held at 2.0 rad/s, below the URDF's arm values, as in the OpenArm-Tesollo
+# profile. Hand `effort` is the URDF's placeholder, not a vendor torque rating.
+# Units are radians; the vendor raw <-> radian conversion belongs to the
+# hardware backend, not this profile.
+joints:
+  - {canonical: r_aj_1, source: openarm_right_joint1, sign: 1, unit: rad, lower: -1.39626, upper: 3.49066, velocity: 2.0, effort: 40}
+  - {canonical: r_aj_2, source: openarm_right_joint2, sign: 1, unit: rad, lower: -0.174533, upper: 3.31612, velocity: 2.0, effort: 40}
+  - {canonical: r_aj_3, source: openarm_right_joint3, sign: 1, unit: rad, lower: -1.5708, upper: 1.5708, velocity: 2.0, effort: 27}
+  - {canonical: r_aj_4, source: openarm_right_joint4, sign: 1, unit: rad, lower: 0, upper: 2.44346, velocity: 2.0, effort: 27}
+  - {canonical: r_aj_5, source: openarm_right_joint5, sign: 1, unit: rad, lower: -1.5708, upper: 1.5708, velocity: 2.0, effort: 7}
+  - {canonical: r_aj_6, source: openarm_right_joint6, sign: 1, unit: rad, lower: -0.785398, upper: 0.785398, velocity: 2.0, effort: 7}
+  - {canonical: r_aj_7, source: openarm_right_joint7, sign: 1, unit: rad, lower: -1.5708, upper: 1.5708, velocity: 2.0, effort: 7}
+  - {canonical: r_hj_thumb_1, source: rh56f1_right_right_thumb_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 2.0943951023931953, velocity: 2.0, effort: 1.0}
+  - {canonical: r_hj_thumb_2, source: rh56f1_right_right_thumb_2_joint, sign: 1, unit: rad, lower: 0.0, upper: 0.4745550236172582, velocity: 2.0, effort: 1.0}
+  - {canonical: r_hj_index_1, source: rh56f1_right_right_index_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: r_hj_middle_1, source: rh56f1_right_right_middle_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: r_hj_ring_1, source: rh56f1_right_right_ring_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: r_hj_pinky_1, source: rh56f1_right_right_little_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: l_aj_1, source: openarm_left_joint1, sign: 1, unit: rad, lower: -3.49066, upper: 1.39626, velocity: 2.0, effort: 40}
+  - {canonical: l_aj_2, source: openarm_left_joint2, sign: 1, unit: rad, lower: -3.31612, upper: 0.174533, velocity: 2.0, effort: 40}
+  - {canonical: l_aj_3, source: openarm_left_joint3, sign: 1, unit: rad, lower: -1.5708, upper: 1.5708, velocity: 2.0, effort: 27}
+  - {canonical: l_aj_4, source: openarm_left_joint4, sign: 1, unit: rad, lower: 0, upper: 2.44346, velocity: 2.0, effort: 27}
+  - {canonical: l_aj_5, source: openarm_left_joint5, sign: 1, unit: rad, lower: -1.5708, upper: 1.5708, velocity: 2.0, effort: 7}
+  - {canonical: l_aj_6, source: openarm_left_joint6, sign: 1, unit: rad, lower: -0.785398, upper: 0.785398, velocity: 2.0, effort: 7}
+  - {canonical: l_aj_7, source: openarm_left_joint7, sign: 1, unit: rad, lower: -1.5708, upper: 1.5708, velocity: 2.0, effort: 7}
+  - {canonical: l_hj_thumb_1, source: rh56f1_left_left_thumb_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 2.0943951023931953, velocity: 2.0, effort: 1.0}
+  - {canonical: l_hj_thumb_2, source: rh56f1_left_left_thumb_2_joint, sign: 1, unit: rad, lower: 0.0, upper: 0.4745550236172582, velocity: 2.0, effort: 1.0}
+  - {canonical: l_hj_index_1, source: rh56f1_left_left_index_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: l_hj_middle_1, source: rh56f1_left_left_middle_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: l_hj_ring_1, source: rh56f1_left_left_ring_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}
+  - {canonical: l_hj_pinky_1, source: rh56f1_left_left_little_1_joint, sign: 1, unit: rad, lower: 0.0, upper: 1.5285593588966337, velocity: 2.0, effort: 1.0}

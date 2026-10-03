@@ -84,10 +84,13 @@ class Group:
 
 @dataclass(frozen=True)
 class RosEndpoint:
-    command_topic: str
-    state_topic: str
-    controller: str
     command_rate_hz: float
+    # Declarative only; nothing reads them. A profile whose bringup serves no
+    # such canonical topic or controller leaves them unset rather than naming
+    # one that does not exist.
+    command_topic: str | None = None
+    state_topic: str | None = None
+    controller: str | None = None
 
 
 @dataclass(frozen=True)

@@ -149,6 +149,17 @@ SETTLE_PROGRESS = 0.1
 UNUSABLE = 2
 REFUSED = 3
 
+# `rh56f1 smoke-test` (OPENARM_RH56F1_INTEGRATION_STATUS.md Stage 4's
+# first-motion procedure): a single-joint, current-pose-relative move, capped
+# well inside the profile's own operational limits on purpose — this tool's
+# job is the very first physical motion, not ordinary operation. Nothing here
+# is exposed as a CLI override; the ceiling is the point.
+RH56F1_PROFILE = "openarm_rh56f1"
+RH56F1_MAX_ARM_DELTA_RAD = 0.05  # ~2.9 degrees
+RH56F1_MAX_HAND_DELTA_RAD = 0.03  # ~1.7 degrees
+RH56F1_MIN_VELOCITY_RAD_PER_SEC = 0.005
+RH56F1_MAX_VELOCITY_RAD_PER_SEC = 0.1  # the profile's own joints allow 2.0 rad/s
+
 
 class Refused(RuntimeError):
     """Understood, measured, and declined — the exit-3 half of the convention.
@@ -374,11 +385,47 @@ def _parser() -> argparse.ArgumentParser:
                 "before one scalar is refused as describing none of them",
             )
     _add_pose(commands)
+    _add_rh56f1(commands)
     # Imported here, not at module level: teach_cli imports this module.
     from .teach_cli import add_parser as _add_teach
 
     _add_teach(commands)
     return parser
+
+
+def _add_rh56f1(commands: argparse._SubParsersAction) -> None:
+    rh56f1 = commands.add_parser(
+        "rh56f1", help="OpenArm + RH56F1 real bringup first-motion tools"
+    )
+    stages = rh56f1.add_subparsers(dest="stage", required=True)
+
+    smoke = stages.add_parser(
+        "smoke-test",
+        help="a single-joint move relative to the current measured pose, for "
+        "the OPENARM_RH56F1_INTEGRATION_STATUS.md Stage 4 first-motion "
+        "procedure; refuses outside a small built-in delta/velocity ceiling",
+    )
+    smoke.add_argument("--side", choices=("left", "right"), required=True)
+    smoke.add_argument("--device", choices=("arm", "hand"), required=True)
+    smoke.add_argument(
+        "--joint", required=True, help="canonical joint name within --side/--device"
+    )
+    smoke.add_argument(
+        "--delta", type=float, required=True,
+        help=f"radians to move --joint from its current measured position; "
+        f"must be nonzero and at most {RH56F1_MAX_ARM_DELTA_RAD:g} rad for an "
+        f"arm joint or {RH56F1_MAX_HAND_DELTA_RAD:g} rad for a hand actuator",
+    )
+    smoke.add_argument(
+        "--velocity", type=float, required=True,
+        help=f"rad/s to move at; must be in "
+        f"[{RH56F1_MIN_VELOCITY_RAD_PER_SEC:g}, {RH56F1_MAX_VELOCITY_RAD_PER_SEC:g}]",
+    )
+    smoke.add_argument(
+        "--execute", action="store_true",
+        help="read the current measured pose and actually send the move; "
+        "without it, nothing is read and nothing is sent (dry run, the default)",
+    )
 
 
 def _add_pose(commands: argparse._SubParsersAction) -> None:
@@ -578,6 +625,101 @@ def _pose(args: argparse.Namespace) -> int:
         # ProfileError, InterfaceError, and SrdfError are all ValueError.
         print(f"error: {error}")
         return UNUSABLE
+
+
+def _rh56f1(args: argparse.Namespace) -> int:
+    """Dispatch an `rh56f1` stage, mapping every failure onto the exit convention."""
+    from .ros_adapter import AdapterUnavailable
+
+    try:
+        if args.stage == "smoke-test":
+            return _rh56f1_smoke_test(args)
+        raise ValueError(f"unknown rh56f1 stage {args.stage!r}")
+    except (SafetyError, Refused) as error:
+        print(f"refused: {error}")
+        return REFUSED
+    except AdapterUnavailable as error:
+        print(f"unavailable: {error}")
+        return UNUSABLE
+    except (ValueError, OSError) as error:
+        print(f"error: {error}")
+        return UNUSABLE
+
+
+def _rh56f1_smoke_test(args: argparse.Namespace) -> int:
+    """A single-joint move relative to the current measured pose.
+
+    Reuses exactly the machinery `pose joints` does (_group, CanonicalInterface,
+    _gate, _start_pose, _ramp, RosAdapter.send_trajectory) — the only thing
+    this adds is computing the absolute target as "current measured pose, one
+    joint offset by --delta" instead of taking an absolute target from
+    --values/--named, and a small built-in delta/velocity ceiling on top of
+    the profile's own joint limits. See
+    OPENARM_RH56F1_INTEGRATION_STATUS.md Stage 4 and docs/rh56f1-real-bringup.md.
+    """
+    from .ros_adapter import RosAdapter
+
+    profile = load_builtin_profile(RH56F1_PROFILE)
+    group_name = f"rh56f1_{args.side}_{args.device}"
+    group = _group(profile, group_name)
+    interface = CanonicalInterface(profile)
+
+    if args.joint not in group.joints:
+        raise ValueError(
+            f"joint {args.joint!r} is not in group {group_name!r}; choices are "
+            f"{list(group.joints)}"
+        )
+    index = group.joints.index(args.joint)
+
+    max_delta = RH56F1_MAX_HAND_DELTA_RAD if args.device == "hand" else RH56F1_MAX_ARM_DELTA_RAD
+    if args.delta == 0.0 or abs(args.delta) > max_delta:
+        raise Refused(
+            f"--delta must be nonzero and at most {max_delta:g} rad for a "
+            f"{args.device} joint; got {args.delta:g}"
+        )
+    if not (RH56F1_MIN_VELOCITY_RAD_PER_SEC <= args.velocity <= RH56F1_MAX_VELOCITY_RAD_PER_SEC):
+        raise Refused(
+            f"--velocity must be in [{RH56F1_MIN_VELOCITY_RAD_PER_SEC:g}, "
+            f"{RH56F1_MAX_VELOCITY_RAD_PER_SEC:g}] rad/s for this smoke test; "
+            f"got {args.velocity:g}"
+        )
+    duration = abs(args.delta) / args.velocity
+
+    if not args.execute:
+        # Offline entirely: nothing is read, nothing is sent. The current pose
+        # is unknown until --execute actually reads it, so only the relative
+        # move itself is shown.
+        print(f"DRY RUN: group={group_name} joint={args.joint} (index {index} of {len(group.joints)})")
+        print(f"  relative delta={args.delta:+.4f} rad over {duration:.2f} s "
+             f"(velocity={args.velocity:g} rad/s)")
+        print("  pass --execute to read the current measured pose and send this as a relative move")
+        return 0
+
+    with RosAdapter(profile, group_name, execute=True) as adapter:
+        here = _start_pose(profile, group, adapter.read_state())
+        target = here.copy()
+        target[index] = here[index] + args.delta
+
+        limits = _joint_limits(profile, group)
+        lower, upper = limits[index].lower, limits[index].upper
+        if not (lower <= target[index] <= upper):
+            raise Refused(
+                f"{args.joint}: current {here[index]:+.4f} + delta "
+                f"{args.delta:+.4f} = {target[index]:+.4f}, outside "
+                f"[{lower:+.4f}, {upper:+.4f}]"
+            )
+
+        rate = profile.endpoint().command_rate_hz
+        gate = _gate(profile, group, seed=here)
+        points = gate.authorize_trajectory(
+            _ramp(here, target, duration, rate), start_time_sec=0.0, period_sec=1.0 / rate
+        )
+        print(f"EXECUTE: group={group_name} joint={args.joint} "
+             f"current={here[index]:+.4f} -> target={target[index]:+.4f} over {duration:.2f} s")
+        _describe(group, interface, target)
+        adapter.send_trajectory(points, period_sec=1.0 / rate)
+        print(f"EXECUTED: {group_name}.{args.joint} over {duration:.2f} s")
+    return 0
 
 
 def _group(profile, name: str):
@@ -2624,6 +2766,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "pose":
         return _pose(args)
+    if args.command == "rh56f1":
+        return _rh56f1(args)
     if args.command == "teach":
         from .teach_cli import run as _teach_run
 

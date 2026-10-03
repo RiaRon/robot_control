@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="openarm_rh56f1_real_control">
+  <!--
+    Real-hardware wrapper, separate from the fake-only
+    openarm_rh56f1_bimanual.urdf.xacro; each launch file includes exactly one.
+
+    runtime_urdf: the source-named variant of the canonical model rendered by
+    openarm_bringup/launch/rh56f1_real_description.py (all geometry and
+    kinematics from the canonical URDF, joint names from its manifest).
+    control_contract: the joint names and position limits read back from that
+    variant, so no name or limit is typed here.
+  -->
+  <xacro:arg name="runtime_urdf" default=""/>
+  <xacro:arg name="control_contract" default=""/>
+  <xacro:arg name="control_xacro" default=""/>
+  <xacro:arg name="right_can_interface" default="can0"/>
+  <xacro:arg name="left_can_interface" default="can1"/>
+  <xacro:arg name="can_fd" default="true"/>
+  <xacro:arg name="enable_right_arm" default="true"/>
+  <xacro:arg name="enable_left_arm" default="true"/>
+  <xacro:arg name="hand_configuration" default="both"/>
+  <!-- No default transport: an enabled hand must say mock or rs485. -->
+  <xacro:arg name="right_hand_transport" default=""/>
+  <xacro:arg name="left_hand_transport" default=""/>
+  <xacro:arg name="right_hand_port" default=""/>
+  <xacro:arg name="left_hand_port" default=""/>
+  <xacro:arg name="right_hand_baudrate" default="0"/>
+  <xacro:arg name="left_hand_baudrate" default="0"/>
+  <xacro:arg name="right_hand_device_id" default="0"/>
+  <xacro:arg name="left_hand_device_id" default="0"/>
+
+  <xacro:include filename="$(arg runtime_urdf)"/>
+  <xacro:include filename="$(arg control_xacro)"/>
+
+  <xacro:openarm_rh56f1_bimanual_real_ros2_control
+    contract_file="$(arg control_contract)"
+    right_can_interface="$(arg right_can_interface)"
+    left_can_interface="$(arg left_can_interface)"
+    can_fd="$(arg can_fd)"
+    enable_right_arm="$(arg enable_right_arm)"
+    enable_left_arm="$(arg enable_left_arm)"
+    hand_configuration="$(arg hand_configuration)"
+    right_hand_transport="$(arg right_hand_transport)"
+    left_hand_transport="$(arg left_hand_transport)"
+    right_hand_port="$(arg right_hand_port)"
+    left_hand_port="$(arg left_hand_port)"
+    right_hand_baudrate="$(arg right_hand_baudrate)"
+    left_hand_baudrate="$(arg left_hand_baudrate)"
+    right_hand_device_id="$(arg right_hand_device_id)"
+    left_hand_device_id="$(arg left_hand_device_id)"/>
+</robot>

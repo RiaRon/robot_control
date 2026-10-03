@@ -1,0 +1,145 @@
+# Copyright 2026 KUKU Robot Lab
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Four independently loadable/configurable/activatable controllers, matching
+# the four independent ros2_control hardware components in
+# openarm_rh56f1.bimanual.real.ros2_control.xacro. None of them is spawned
+# active by openarm.rh56f1_bimanual_real.launch.py — see that launch file and
+# docs/rh56f1-real-bringup.md for the explicit, manual activation procedure.
+# Controller names equal the openarm_rh56f1 profile's group controllers, and
+# joint names are the runtime description's source names
+# (tests/test_openarm_rh56f1_real_control_description.py checks both). The
+# launch file drops the controllers of disabled devices and adds the
+# broadcasters (rh56f1_real_description.controller_params).
+controller_manager:
+  ros__parameters:
+    update_rate: 750  # Hz — matches the stock OpenArm real bimanual bringup.
+
+    # Read-only broadcasters (one per device, so one failing device takes
+    # nothing else down) are added by the launch file from the enabled
+    # devices: joint_state_broadcaster (arms) and per hand
+    # rh56f1_<side>_hand_state_broadcaster (/joint_states, or its local topic
+    # for an explicitly allowed mock hand) and
+    # rh56f1_<side>_hand_status_broadcaster (comm_ok, fault, command_clamped,
+    # is_mock, writes on its local /dynamic_joint_states).
+
+    rh56f1_right_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    rh56f1_left_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    rh56f1_right_hand_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    rh56f1_left_hand_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+rh56f1_right_arm_controller:
+  ros__parameters:
+    joints:
+      - openarm_right_joint1
+      - openarm_right_joint2
+      - openarm_right_joint3
+      - openarm_right_joint4
+      - openarm_right_joint5
+      - openarm_right_joint6
+      - openarm_right_joint7
+    interface_name: position
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    interpolation_method: "none"
+    interpolate_from_desired_state: true
+    state_publish_rate: 50.0
+    action_monitor_rate: 50.0
+    # A single-joint preflight goal (Stage 4 first-motion procedure) commands
+    # one of these seven and must not require the other six.
+    allow_partial_joints_goal: true
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+      decelerate_on_cancel: false
+
+rh56f1_left_arm_controller:
+  ros__parameters:
+    joints:
+      - openarm_left_joint1
+      - openarm_left_joint2
+      - openarm_left_joint3
+      - openarm_left_joint4
+      - openarm_left_joint5
+      - openarm_left_joint6
+      - openarm_left_joint7
+    interface_name: position
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    interpolation_method: "none"
+    interpolate_from_desired_state: true
+    state_publish_rate: 50.0
+    action_monitor_rate: 50.0
+    allow_partial_joints_goal: true
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+      decelerate_on_cancel: false
+
+rh56f1_right_hand_controller:
+  ros__parameters:
+    joints:
+      - rh56f1_right_right_thumb_1_joint
+      - rh56f1_right_right_thumb_2_joint
+      - rh56f1_right_right_index_1_joint
+      - rh56f1_right_right_middle_1_joint
+      - rh56f1_right_right_ring_1_joint
+      - rh56f1_right_right_little_1_joint
+    interface_name: position
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    interpolation_method: "none"
+    interpolate_from_desired_state: true
+    state_publish_rate: 50.0
+    action_monitor_rate: 50.0
+    # A single-actuator preflight goal (Stage 4 first-motion procedure) commands
+    # one of these six and must not require the other five.
+    allow_partial_joints_goal: true
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+      decelerate_on_cancel: false
+
+rh56f1_left_hand_controller:
+  ros__parameters:
+    joints:
+      - rh56f1_left_left_thumb_1_joint
+      - rh56f1_left_left_thumb_2_joint
+      - rh56f1_left_left_index_1_joint
+      - rh56f1_left_left_middle_1_joint
+      - rh56f1_left_left_ring_1_joint
+      - rh56f1_left_left_little_1_joint
+    interface_name: position
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    interpolation_method: "none"
+    interpolate_from_desired_state: true
+    state_publish_rate: 50.0
+    action_monitor_rate: 50.0
+    allow_partial_joints_goal: true
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+      decelerate_on_cancel: false
