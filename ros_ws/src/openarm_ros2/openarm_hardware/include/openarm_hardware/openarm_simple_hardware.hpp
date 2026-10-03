@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <openarm/can/socket/openarm.hpp>
 #include <openarm/damiao_motor/dm_motor_constants.hpp>
@@ -25,11 +27,14 @@
 #include "hardware_interface/hardware_info.hpp"
 #include "hardware_interface/system_interface.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
+#include "openarm_hardware/startup_safety.hpp"
 #include "openarm_hardware/visibility_control.h"
 #include "rclcpp/macros.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 
 namespace openarm_hardware {
+
+class FrameCountingDevice;
 
 /**
  * @brief Simplified OpenArm V10 Hardware Interface
@@ -120,9 +125,28 @@ class OpenArmHW : public hardware_interface::SystemInterface {
   std::string ee_type_;
   bool hand_;
   bool can_fd_;
+  // Absent parameter => true, the upstream behavior every existing bringup
+  // relies on. false never moves the arm on activation.
+  bool auto_return_to_zero_ = true;
+  // Defaults keep the stock bringup's lifecycle unchanged; the OpenArm+RH56F1
+  // real description sets all three.
+  double min_inactive_sec_before_activate_ = 0.0;
+  bool verify_state_before_enable_ = false;
+  double state_stale_timeout_sec_ = 0.0;
 
   // OpenArm instance
   std::unique_ptr<openarm::can::socket::OpenArm> openarm_;
+
+  // One per arm motor (then the gripper, if any): counts CAN frames dispatched
+  // to that motor, the only freshness signal the CAN library offers.
+  std::vector<std::shared_ptr<FrameCountingDevice>> frame_counters_;
+  std::vector<startup_safety::Bounds> position_bounds_;
+  startup_safety::StaleMonitor stale_monitor_;
+  std::vector<uint64_t> fresh_before_;
+  double configured_at_sec_ = std::numeric_limits<double>::quiet_NaN();
+  bool active_ = false;
+  bool fault_latched_ = false;
+  std::string fault_reason_;
 
   // Generated joint names for this arm instance
   std::vector<std::string> joint_names_;
@@ -154,10 +178,15 @@ class OpenArmHW : public hardware_interface::SystemInterface {
   void return_to_zero();
   bool parse_config(const hardware_interface::HardwareInfo& info);
   void generate_joint_names();
+  void install_frame_counters();
+  std::vector<uint64_t> frame_counts() const;
+  std::vector<double> motor_positions() const;
+  bool await_fresh_state(const char* phase, int timeout_ms);
+  void latch_fault(const std::string& reason);
 
   // Gripper mapping functions
-  double joint_to_motor_radians(double joint_value);
-  double motor_radians_to_joint(double motor_radians);
+  double joint_to_motor_radians(double joint_value) const;
+  double motor_radians_to_joint(double motor_radians) const;
 };
 
 }  // namespace openarm_hardware

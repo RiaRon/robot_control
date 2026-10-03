@@ -75,4 +75,10 @@ ament_export_dependencies(
   rclcpp
 )
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_startup_safety test/test_startup_safety.cpp)
+  target_include_directories(test_startup_safety PRIVATE include)
+endif()
+
 ament_package()
