@@ -41,4 +41,8 @@ install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS scripts/openarm_rh56f1_joint_state_merger.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
