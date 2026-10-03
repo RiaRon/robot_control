@@ -10,22 +10,34 @@
 
 import os
 from pathlib import Path
+import shutil
 import sys
+import tempfile
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument,
+    OpaqueFunction,
+    RegisterEventHandler,
+    TimerAction,
+)
+from launch.event_handlers import OnShutdown
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from device_guard import require_no_controller_manager  # noqa: E402
 from rh56f1_description import (  # noqa: E402
     HAND_CONFIGURATIONS,
     RH56F1_STATE_POLICIES,
+    default_manifest_for,
+    fake_hand_controller_params,
     render_control_description,
 )
+import yaml  # noqa: E402
 
 
 def _default_canonical_urdf() -> str:
@@ -36,7 +48,7 @@ def _default_canonical_urdf() -> str:
     candidates.extend(
         [
             Path("/workspace/kuku_lab") / relative,
-            Path("/home/cbj4/kuku_lab") / relative,
+            Path.home() / "kuku_lab" / relative,
         ]
     )
     for parent in Path(__file__).resolve().parents:
@@ -65,6 +77,7 @@ def _robot_nodes(
     use_fake_hardware,
     controllers_file,
     namespace,
+    manifest,
 ):
     fake = context.perform_substitution(use_fake_hardware).lower() in (
         "1",
@@ -75,16 +88,33 @@ def _robot_nodes(
     wrapper = Path(description_package) / (
         "urdf/robot/openarm_rh56f1_bimanual.urdf.xacro"
     )
+    source_urdf = Path(context.perform_substitution(canonical_urdf))
+    selected_hands = context.perform_substitution(hand_configuration)
+    state_policy = context.perform_substitution(rh56f1_state_policy)
     description = render_control_description(
-        source_urdf=Path(context.perform_substitution(canonical_urdf)),
+        source_urdf=source_urdf,
         wrapper_xacro=wrapper,
-        hand_configuration=context.perform_substitution(hand_configuration),
-        state_policy=context.perform_substitution(rh56f1_state_policy),
+        hand_configuration=selected_hands,
+        state_policy=state_policy,
         use_fake_hardware=fake,
     )
     node_namespace = _namespace(context, namespace)
+    # The split bringup uses the same /controller_manager for its arms.
+    require_no_controller_manager(node_namespace or "")
     robot_description = {"robot_description": description}
-    return [
+    hand_controllers = []
+    if state_policy == "fake_commandable":
+        manifest_path = context.perform_substitution(manifest)
+        hand_controllers = _fake_hand_controllers(
+            context,
+            namespace,
+            fake_hand_controller_params(
+                Path(manifest_path) if manifest_path else default_manifest_for(source_urdf),
+                selected_hands,
+                description,
+            ),
+        )
+    return hand_controllers + [
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
@@ -121,6 +151,40 @@ def _joint_state_broadcaster(context: LaunchContext, namespace):
     ]
 
 
+def _fake_hand_controllers(context: LaunchContext, namespace, params: dict):
+    """Spawn the fake-only hand trajectory controllers from a generated file."""
+
+    if not params:
+        return []
+    directory = tempfile.mkdtemp(prefix="openarm_rh56f1_fake_hands_")
+    param_file = Path(directory) / "fake_hand_controllers.yaml"
+    param_file.write_text(yaml.safe_dump(params, sort_keys=False))
+    # The spawner applies every --param-file to each named controller.
+    arguments = list(params) + ["--param-file", str(param_file)]
+    return [
+        RegisterEventHandler(
+            OnShutdown(
+                on_shutdown=lambda *_: shutil.rmtree(directory, ignore_errors=True)
+            )
+        ),
+        TimerAction(
+            period=1.0,
+            actions=[
+                Node(
+                    package="controller_manager",
+                    executable="spawner",
+                    namespace=_namespace(context, namespace),
+                    arguments=arguments
+                    + [
+                        "--controller-manager",
+                        _controller_manager(context, namespace),
+                    ],
+                )
+            ],
+        ),
+    ]
+
+
 def _arm_controllers(context: LaunchContext, namespace):
     return [
         Node(
@@ -144,6 +208,7 @@ def generate_launch_description():
     use_fake_hardware = LaunchConfiguration("use_fake_hardware")
     namespace = LaunchConfiguration("namespace")
     use_rviz = LaunchConfiguration("use_rviz")
+    manifest = LaunchConfiguration("manifest")
     controllers_file = PathJoinSubstitution(
         [
             FindPackageShare("openarm_bringup"),
@@ -171,7 +236,17 @@ def generate_launch_description():
             choices=list(RH56F1_STATE_POLICIES),
             description=(
                 "inactive exports no hand interfaces; parked exports six "
-                "fake-only zero-state actuators per selected hand."
+                "fake-only zero-state actuators per selected hand; "
+                "fake_commandable exports the same six and spawns a fake-only "
+                "hand trajectory controller per selected hand."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "manifest",
+            default_value="",
+            description=(
+                "Canonical manifest for the fake hand controller joint order; "
+                "default: <canonical_urdf stem>_manifest.yaml."
             ),
         ),
         DeclareLaunchArgument(
@@ -199,6 +274,7 @@ def generate_launch_description():
             use_fake_hardware,
             controllers_file,
             namespace,
+            manifest,
         ],
     )
     joint_state_broadcaster = OpaqueFunction(

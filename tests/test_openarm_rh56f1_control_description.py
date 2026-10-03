@@ -1,6 +1,7 @@
 """Static/Xacro contract for the fake-only OpenArm + RH56F1 bringup."""
 
 from pathlib import Path
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 
@@ -16,13 +17,19 @@ LAUNCH_DIR = (
 sys.path.insert(0, str(LAUNCH_DIR))
 
 from rh56f1_description import (  # noqa: E402
+    FAKE_HAND_CONTROLLERS,
     HAND_CONFIGURATIONS,
     build_canonical_variant,
+    default_manifest_for,
+    fake_hand_controller_params,
     render_control_description,
+    ros2_control_joint_names,
 )
 
 
 CANONICAL = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
+MANIFEST = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml"
+PROFILE = ROOT / "src/robot_control/profiles/openarm_rh56f1.yaml"
 WRAPPER = (
     ROOT
     / "ros_ws/src/openarm_description/urdf/robot/"
@@ -67,16 +74,19 @@ HAND_MIMICS = {
 }
 
 
-def _render(configuration: str, policy: str = "parked") -> ET.Element:
+def _render_text(configuration: str, policy: str = "parked") -> str:
     pytest.importorskip("xacro")
-    description = render_control_description(
+    return render_control_description(
         source_urdf=CANONICAL,
         wrapper_xacro=WRAPPER,
         hand_configuration=configuration,
         state_policy=policy,
         use_fake_hardware=True,
     )
-    return ET.fromstring(description)
+
+
+def _render(configuration: str, policy: str = "parked") -> ET.Element:
+    return ET.fromstring(_render_text(configuration, policy))
 
 
 def _assert_tree(root: ET.Element) -> None:
@@ -223,3 +233,132 @@ def test_disabled_hand_removal_does_not_mutate_canonical_input():
     for configuration in HAND_CONFIGURATIONS:
         build_canonical_variant(CANONICAL, configuration)
     assert CANONICAL.read_bytes() == before
+
+
+# ------------------------------------------------ fake_commandable (fake-only)
+_ENABLED = {"arm_only": (), "left": ("left",), "right": ("right",),
+            "both": ("right", "left")}
+
+
+@pytest.mark.parametrize("configuration", HAND_CONFIGURATIONS)
+def test_fake_commandable_exports_exactly_the_parked_resources(configuration):
+    parked = _render_text(configuration, "parked")
+    commandable = _render_text(configuration, "fake_commandable")
+    assert ros2_control_joint_names(commandable) == ros2_control_joint_names(parked)
+    assert ET.tostring(ET.fromstring(commandable).find("ros2_control")) == ET.tostring(
+        ET.fromstring(parked).find("ros2_control")
+    )
+    plugins = [e.text for e in ET.fromstring(commandable).findall("ros2_control/hardware/plugin")]
+    assert plugins == ["mock_components/GenericSystem"]
+
+
+@pytest.mark.parametrize("configuration", HAND_CONFIGURATIONS)
+def test_fake_hand_controllers_take_manifest_order_and_only_actuators(configuration):
+    description = _render_text(configuration, "fake_commandable")
+    params = fake_hand_controller_params(MANIFEST, configuration, description)
+    order = yaml.safe_load(MANIFEST.read_text())["control_joint_order"]
+    assert list(params) == [FAKE_HAND_CONTROLLERS[side] for side in _ENABLED[configuration]]
+    for side in _ENABLED[configuration]:
+        values = params[FAKE_HAND_CONTROLLERS[side]]["ros__parameters"]
+        prefix = "r_hj_" if side == "right" else "l_hj_"
+        assert values["joints"] == [name for name in order if name.startswith(prefix)]
+        assert values["joints"] == HAND_ACTUATORS[side]
+        assert not set(values["joints"]) & set(HAND_MIMICS[side])
+        assert values["type"] == "joint_trajectory_controller/JointTrajectoryController"
+        assert values["command_interfaces"] == ["position"]
+        assert values["state_interfaces"] == ["position"]
+    assert default_manifest_for(CANONICAL) == MANIFEST
+
+
+def test_fake_hand_controllers_refuse_a_description_without_hand_resources():
+    inactive = _render_text("both", "inactive")
+    with pytest.raises(ValueError, match="does not match"):
+        fake_hand_controller_params(MANIFEST, "both", inactive)
+
+
+def test_fake_controller_groups_reproduce_manifest_and_profile_canonical_order():
+    """Canonical <-> fake controller mapping is identity and order preserving."""
+
+    description = _render_text("both", "fake_commandable")
+    hands = fake_hand_controller_params(MANIFEST, "both", description)
+    arms = yaml.safe_load(CONTROLLERS.read_text())
+    groups = {
+        "right_arm": arms["right_joint_trajectory_controller"]["ros__parameters"]["joints"],
+        "right_hand": hands[FAKE_HAND_CONTROLLERS["right"]]["ros__parameters"]["joints"],
+        "left_arm": arms["left_joint_trajectory_controller"]["ros__parameters"]["joints"],
+        "left_hand": hands[FAKE_HAND_CONTROLLERS["left"]]["ros__parameters"]["joints"],
+    }
+    order = yaml.safe_load(MANIFEST.read_text())["control_joint_order"]
+    concatenated = [name for group in groups.values() for name in group]
+    assert concatenated == order
+    assert concatenated == ros2_control_joint_names(description)
+    profile = yaml.safe_load(PROFILE.read_text())
+    assert [entry["canonical"] for entry in profile["joints"]] == order
+    for group, joints in groups.items():
+        assert profile["groups"][f"rh56f1_{group}"]["joints"] == joints
+
+
+def _launch_actions(policy: str, configuration: str = "both"):
+    pytest.importorskip("launch")
+    ament = pytest.importorskip("ament_index_python.packages")
+    try:
+        ament.get_package_share_directory("openarm_description")
+    except Exception:
+        pytest.skip("openarm_description is not installed in this environment")
+    import importlib.util
+    from launch import LaunchContext
+    from launch.actions import TimerAction
+    from launch.substitutions import TextSubstitution
+
+    spec = importlib.util.spec_from_file_location(
+        "rh56f1_fake_launch", LAUNCH_DIR / "openarm.rh56f1_bimanual.launch.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    text = TextSubstitution
+    actions = module._robot_nodes(
+        LaunchContext(),
+        text(text=str(CANONICAL)),
+        text(text=configuration),
+        text(text=policy),
+        text(text="true"),
+        text(text=str(CONTROLLERS)),
+        text(text=""),
+        text(text=""),
+    )
+    nodes = []
+    for action in actions:
+        nodes += action.actions if isinstance(action, TimerAction) else [action]
+    return nodes
+
+
+def _spawned(nodes):
+    spawned = []
+    for node in nodes:
+        if getattr(node, "node_executable", None) != "spawner":
+            continue
+        arguments = [
+            a if isinstance(a, str) else "".join(part.text for part in a)
+            for a in node._Node__arguments
+        ]
+        spawned.append(arguments)
+    return spawned
+
+
+@pytest.mark.parametrize("policy", ("parked", "inactive"))
+def test_existing_policies_spawn_no_hand_controller(policy):
+    assert _spawned(_launch_actions(policy)) == []
+
+
+def test_fake_commandable_spawns_one_controller_per_selected_hand():
+    spawned = _spawned(_launch_actions("fake_commandable", "both"))
+    assert len(spawned) == 1
+    arguments = spawned[0]
+    assert arguments[:2] == [FAKE_HAND_CONTROLLERS["right"], FAKE_HAND_CONTROLLERS["left"]]
+    param_file = Path(arguments[arguments.index("--param-file") + 1])
+    try:
+        assert yaml.safe_load(param_file.read_text())[FAKE_HAND_CONTROLLERS["left"]][
+            "ros__parameters"]["joints"] == HAND_ACTUATORS["left"]
+    finally:
+        shutil.rmtree(param_file.parent, ignore_errors=True)
+    assert _spawned(_launch_actions("fake_commandable", "arm_only")) == []

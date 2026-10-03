@@ -31,11 +31,13 @@
       <!--
         Parked is a fake-only zero pose. Zero is within every canonical hand
         actuator limit. There is deliberately no hand controller, so these
-        command interfaces remain unclaimed. Mimic/passive joints are not
+        command interfaces remain unclaimed. fake_commandable exports the same
+        six resources per hand, and the launch then spawns one fake-only hand
+        trajectory controller per selected hand. Mimic/passive joints are not
         ros2_control resources and follow the canonical URDF mimic tags.
       -->
       <xacro:if
-        value="${state_policy == 'parked' and (hand_configuration == 'right' or hand_configuration == 'both')}">
+        value="${state_policy in ('parked', 'fake_commandable') and (hand_configuration == 'right' or hand_configuration == 'both')}">
         <xacro:fake_control_joint name="r_hj_thumb_1"/>
         <xacro:fake_control_joint name="r_hj_thumb_2"/>
         <xacro:fake_control_joint name="r_hj_index_1"/>
@@ -53,7 +55,7 @@
       <xacro:fake_control_joint name="l_aj_7"/>
 
       <xacro:if
-        value="${state_policy == 'parked' and (hand_configuration == 'left' or hand_configuration == 'both')}">
+        value="${state_policy in ('parked', 'fake_commandable') and (hand_configuration == 'left' or hand_configuration == 'both')}">
         <xacro:fake_control_joint name="l_hj_thumb_1"/>
         <xacro:fake_control_joint name="l_hj_thumb_2"/>
         <xacro:fake_control_joint name="l_hj_index_1"/>

@@ -13,11 +13,21 @@ from pathlib import Path
 import tempfile
 import xml.etree.ElementTree as ET
 
+import yaml
+
 
 HAND_CONFIGURATIONS = ("arm_only", "left", "right", "both")
-RH56F1_STATE_POLICIES = ("inactive", "parked")
+RH56F1_STATE_POLICIES = ("inactive", "parked", "fake_commandable")
+#: Policies whose selected hands export the six actuator interfaces.
+HAND_RESOURCE_POLICIES = ("parked", "fake_commandable")
+#: Fake-only test controllers, spawned only under ``fake_commandable``.
+FAKE_HAND_CONTROLLERS = {
+    "right": "right_hand_trajectory_controller",
+    "left": "left_hand_trajectory_controller",
+}
 LEGACY_MESH_ROOT = "file:///home/user/rl_ws/urdf/"
 _HAND_LINK_PREFIX = {"left": "l_hl_", "right": "r_hl_"}
+_HAND_JOINT_PREFIX = {"left": "l_hj_", "right": "r_hj_"}
 
 
 def _enabled_sides(hand_configuration: str) -> set[str]:
@@ -31,6 +41,61 @@ def _enabled_sides(hand_configuration: str) -> set[str]:
     if hand_configuration == "arm_only":
         return set()
     return {hand_configuration}
+
+
+def default_manifest_for(canonical_urdf: Path) -> Path:
+    """``<stem>_manifest.yaml`` next to the canonical URDF."""
+
+    canonical_urdf = Path(canonical_urdf)
+    return canonical_urdf.with_name(canonical_urdf.stem + "_manifest.yaml")
+
+
+def ros2_control_joint_names(description: str) -> list[str]:
+    """Joint resources declared by the rendered ros2_control overlay, in order."""
+
+    root = ET.fromstring(description)
+    return [joint.get("name") for joint in root.findall("ros2_control/joint")]
+
+
+def fake_hand_controller_params(
+    manifest: Path, hand_configuration: str, description: str
+) -> dict:
+    """Parameters of the fake-only hand trajectory controllers.
+
+    Each controller's joints are the manifest ``control_joint_order`` entries
+    of its side's hand, in that order; nothing is listed here.  They must be
+    exactly the hand resources of the rendered description, so a passive or
+    mimic joint can never become a controller joint.
+    """
+
+    order = yaml.safe_load(Path(manifest).read_text()).get("control_joint_order")
+    if not isinstance(order, list) or not order:
+        raise ValueError(f"{manifest}: no control_joint_order")
+    resources = ros2_control_joint_names(description)
+    params = {}
+    for side in ("right", "left"):
+        if side not in _enabled_sides(hand_configuration):
+            continue
+        prefix = _HAND_JOINT_PREFIX[side]
+        joints = [name for name in order if name.startswith(prefix)]
+        described = [name for name in resources if name.startswith(prefix)]
+        if joints != described:
+            raise ValueError(
+                f"{side} hand: manifest control_joint_order {joints} does not "
+                f"match the ros2_control hand resources {described}"
+            )
+        params[FAKE_HAND_CONTROLLERS[side]] = {
+            "ros__parameters": {
+                "type": "joint_trajectory_controller/JointTrajectoryController",
+                "joints": joints,
+                "command_interfaces": ["position"],
+                "state_interfaces": ["position"],
+                "state_publish_rate": 50.0,
+                "action_monitor_rate": 20.0,
+                "allow_partial_joints_goal": False,
+            }
+        }
+    return params
 
 
 def build_canonical_variant(
