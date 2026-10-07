@@ -1,0 +1,47 @@
+# Nova2 glove -> RH56F1 fake hand: the adapter between a hand-target producer
+# (today: the retarget node of inspire_hand-main.zip, vendored unmodified in
+# third_party/inspire_hand_senseglove_teleop) and one hand's controller manager.
+# {side} is right or left. Everything a newer producer could change is here.
+
+# What the producer publishes: hand TARGETS, never measured hand state.
+source:
+  topic: /inspire_{side}/retarget/joint_states   # sensor_msgs/JointState
+  unit: rad
+  # Source joint name -> our actuator, and the source value that means fully
+  # closed (0 = fully open). Mapped by name; message order is never used.
+  joints:
+    pinky_proximal_joint: {actuator: pinky_1, closed: 1.47}
+    ring_proximal_joint: {actuator: ring_1, closed: 1.47}
+    middle_proximal_joint: {actuator: middle_1, closed: 1.47}
+    index_proximal_joint: {actuator: index_1, closed: 1.47}
+    # Thumb, by the canonical URDF: thumb_2 is the bend (child of thumb_1,
+    # drives the thumb_3/thumb_4 mimic chain); thumb_1 rotates the whole thumb
+    # at the palm base. The physical correspondence is NOT verified.
+    thumb_proximal_pitch_joint: {actuator: thumb_2, closed: 0.6}
+    thumb_proximal_yaw_joint: {actuator: thumb_1, closed: 1.308}
+
+# hold: keep the thumb axis where it measured when following (re)started, as
+# the old hand_bridge_node does with a fixed raw value (bend fixed unless
+# drive_thumb, rotation always fixed). follow: move it with the source target.
+thumb:
+  pitch: hold
+  yaw: hold
+
+# The glove driver's topic, for the retarget node and the synthetic glove. The
+# serial number is not a default: it is per glove and must be given.
+glove:
+  topic: /senseglove/glove{serial}/{hand}/joint_states   # {hand}: rh | lh
+
+hand:
+  controller_manager: /rh56f1_{side}/controller_manager
+  controller: "{side}_hand_trajectory_controller"
+  joint_states_topic: /rh56f1_{side}/joint_states
+  fake_plugin: mock_components/GenericSystem
+
+timing:
+  target_timeout_sec: 0.5
+  joint_state_timeout_sec: 0.5
+  command_rate_hz: 50
+  # time_from_start of each streamed point, as quest_teleop.yaml. Must be
+  # below the command period (1 / command_rate_hz).
+  stream_horizon_sec: 0.0

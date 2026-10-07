@@ -8,7 +8,7 @@
 # mount. Only openarm_description and openarm_bringup are built; the image's
 # /root/ros2_ws overlay (with the real OpenArmHW plugin) is not sourced.
 #
-# Usage: tests/run_humble_split_bringup.sh [split|quest|real_double|all]   (default all)
+# Usage: tests/run_humble_split_bringup.sh [split|quest|real_double|glove|all]   (default all)
 set -euo pipefail
 
 KUKU_LAB="${KUKU_LAB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -27,7 +27,7 @@ docker run --rm --init --name "$NAME" --user "$(id -u):$(id -g)" \
   -e ROS_DOMAIN_ID="$DOMAIN" -e ROS_LOCALHOST_ONLY=1 \
   -e HOME=/tmp/home -e ROS_HOME=/tmp/ros -e PYTHONDONTWRITEBYTECODE=1 \
   -e KUKU_LAB_ROOT=/workspace/kuku_lab -e PROBE_LOG_DIR=/probe_logs \
-  -e WHAT="$WHAT" \
+  -e WHAT="$WHAT" -e GLOVE_SCENARIO="${GLOVE_SCENARIO:-all}" \
   --entrypoint bash "$IMAGE" -c '
 set -eo pipefail
 mkdir -p "$HOME"
@@ -55,7 +55,12 @@ cd /workspace/kuku_lab/robot_control
 echo "== static tests"
 python3 -m pytest -q -p no:cacheprovider tests/test_openarm_rh56f1_split_bringup.py \
   tests/test_quest_teleop.py tests/test_openarm_rh56f1_control_description.py \
-  tests/test_openarm_rh56f1_real_control_description.py 2>&1 | tail -2
+  tests/test_openarm_rh56f1_real_control_description.py tests/test_rh56f1_glove_teleop.py \
+  2>&1 | tail -2
+echo "== vendored retarget tests (inspire_hand-main, unmodified)"
+PYTHONPATH="third_party/inspire_hand_senseglove_teleop/senseglove_teleop:$PYTHONPATH" \
+  python3 -m pytest -q -p no:cacheprovider \
+  third_party/inspire_hand_senseglove_teleop/senseglove_teleop/tests/test_mapping.py 2>&1 | tail -1
 
 status=0
 if [ "$WHAT" = all ] || [ "$WHAT" = split ]; then
@@ -65,6 +70,10 @@ fi
 if [ "$WHAT" = all ] || [ "$WHAT" = quest ]; then
   echo "== Quest teleop probe on the split arms"
   python3 tests/humble_quest_teleop_probe.py || status=1
+fi
+if [ "$WHAT" = all ] || [ "$WHAT" = glove ]; then
+  echo "== synthetic Nova2 glove -> fake hands (with arms and Quest)"
+  python3 tests/humble_glove_fake_probe.py --scenario "${GLOVE_SCENARIO:-all}" || status=1
 fi
 if [ "$WHAT" = all ] || [ "$WHAT" = real_double ]; then
   echo "== real split arm description with arm test doubles"

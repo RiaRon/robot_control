@@ -42,6 +42,7 @@ install(DIRECTORY launch config
 )
 
 install(PROGRAMS scripts/openarm_rh56f1_joint_state_merger.py
+  scripts/fake_trajectory_controller_prime.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

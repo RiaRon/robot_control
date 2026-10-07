@@ -255,11 +255,40 @@ def wait_controllers(node, device, names, timeout=40.0):
         listed = node.controllers(device)
         if listed is not None and set(listed) == set(names) and all(
                 c.state == "active" for c in listed.values()):
+            wait_primed(node, device, [n for n in names if n.endswith("trajectory_controller")],
+                        max(1.0, deadline - time.monotonic()))
             return listed
         node.spin_for(0.3)
     listed = node.controllers(device)
     raise AssertionError(f"{device} controllers: "
                          f"{None if listed is None else {n: c.state for n, c in listed.items()}}")
+
+
+def wait_primed(node, device, controllers, timeout):
+    """Until each fake trajectory controller has finished an action goal.
+
+    The launch's fake_trajectory_controller_prime.py sends one hold goal right
+    after spawning; a goal sent before it finishes would be preempted by it.
+    The action status topic is transient local and keeps finished goals.
+    """
+    from action_msgs.msg import GoalStatus, GoalStatusArray
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+
+    namespace = MANAGER[device].rsplit("/", 1)[0]
+    finished = set()
+    done = (GoalStatus.STATUS_SUCCEEDED, GoalStatus.STATUS_ABORTED, GoalStatus.STATUS_CANCELED)
+    qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                     reliability=ReliabilityPolicy.RELIABLE)
+    subscriptions = [node.create_subscription(
+        GoalStatusArray, f"{namespace}/{name}/follow_joint_trajectory/_action/status",
+        lambda m, n=name: finished.add(n) if any(s.status in done for s in m.status_list)
+        else None, qos) for name in controllers]
+    try:
+        node.spin_until(lambda: finished >= set(controllers), timeout,
+                        f"{device} trajectory controllers primed")
+    finally:
+        for subscription in subscriptions:
+            node.destroy_subscription(subscription)
 
 
 def check_manager(node, tag, device, expected_joints, controllers):

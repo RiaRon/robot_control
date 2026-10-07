@@ -19,6 +19,7 @@ OpenArm-Tesollo bringup(`KUKU-Robot-Lab/robot_control` humble @ `a8328a1`)을 �
 | Quest 합성 입력 → 분리된 fake 팔 추종 | 자동 회귀로 검증 |
 | 실제 Quest 입력 → 분리된 fake 오른팔, RViz | **사용자가 확인** (2026-10-03). 위치 추종과 `--orientation-mode relative` 회전이 정상 동작 |
 | real 팔 launch 구조(손 hardware 없음, inactive 시작) | 정적 검사와 GenericSystem 대역으로만 검증 |
+| 합성 Nova2 글러브 → 손별 fake 손 (Quest 팔과 함께) | 자동 회귀로 검증 (2026-10-04, `docs/rh56f1-glove-fake.md`) |
 | 실제 OpenArm 운동, 실제 손 | **미검증. 실행한 적 없음** |
 
 ## 1. 구조
@@ -36,6 +37,12 @@ OpenArm-Tesollo bringup(`KUKU-Robot-Lab/robot_control` humble @ `a8328a1`)을 �
   - passive/mimic 관절(`thumb_3`, `thumb_4`, `*_2`)은 어느 CM의 resource도 아니다.
   - description은 파라미터로 받으므로 각 CM은 다른 프로세스 없이 혼자 뜬다.
 - 팔 launch는 손 launch를 시작하지도 기다리지도 않는다. 손 launch도 팔과 무관하다.
+- fake 팔과 fake 손 launch는 trajectory controller spawn 직후
+  `fake_trajectory_controller_prime.py`를 한 번 실행한다. 측정 위치를 그대로 담은 hold goal을
+  보내 끝날 때까지 기다린다(움직임 0). joint_trajectory_controller 2.47.0이 action goal을 한
+  번도 끝내지 않은 상태에서는 토픽 명령을 로그 없이 버릴 수 있기 때문이다
+  (`docs/rh56f1-glove-fake.md` 9절). 로그에 `topic commands are accepted`가 나오기 전에 보낸
+  action goal은 이 hold goal에 선점될 수 있다. real 팔 launch에는 없다.
 - real 손 launch는 없다. `rh56f1_hand.launch.py runtime:=real`은 거부된다(6절).
 - 관절 이름은 이렇게 정했다.
   - fake: canonical(`r_aj_1`, `r_hj_thumb_1`), 이전 fake와 같다.
@@ -182,6 +189,15 @@ python3 -m openarm_quest_teleop.ros_teleop --arm left  --runtime fake --execute 
 이전 단일 CM fake(`openarm.rh56f1_bimanual.launch.py`)에 붙이려면
 `--runtime fake_integrated`를 쓴다.
 
+### 4.4a Nova2 글러브 → fake 손
+
+손별 글러브 입력(원본 retarget 노드 + adapter)은 `docs/rh56f1-glove-fake.md`를 본다.
+
+```bash
+ros2 launch openarm_bringup rh56f1_glove_input.launch.py side:=right glove_serial:=SYNTH execute:=true
+python3 -m rh56f1_glove_teleop.synth_glove --side right --serial SYNTH --scenario wave
+```
+
 ### 4.5 독립 정지와 재실행
 
 각 launch 터미널에서 Ctrl-C를 누르면 그 프로세스만 멈춘다.
@@ -197,8 +213,9 @@ python3 -m openarm_quest_teleop.ros_teleop --arm left  --runtime fake --execute 
 
 ```bash
 cd ~/kuku_lab/robot_control
-tests/run_humble_split_bringup.sh            # 정적 테스트 + 분리 구조 + Quest + real 대역
+tests/run_humble_split_bringup.sh            # 정적 테스트 + 분리 구조 + Quest + glove + real 대역
 tests/run_humble_split_bringup.sh split      # 분리 구조만
+tests/run_humble_split_bringup.sh glove      # 합성 Nova2 글러브 → fake 손 (+ 팔, Quest)
 ```
 
 ## 5. 정지 방법의 차이

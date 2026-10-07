@@ -198,7 +198,7 @@ python3 -m openarm_quest_teleop.synth --scenario axes
 ```bash
 cd ~/kuku_lab/robot_control
 tests/run_humble_split_bringup.sh quest     # 분리 bringup 위의 Quest 회귀
-tests/run_humble_split_bringup.sh           # 분리 구조 + Quest + real 대역 전체
+tests/run_humble_split_bringup.sh           # 분리 구조 + Quest + glove + real 대역 전체
 ```
 
 ## 6. real 팔: 상태와 controller 확인

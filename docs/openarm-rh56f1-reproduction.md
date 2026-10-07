@@ -74,12 +74,13 @@ sha256sum urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml
 
 ```bash
 cd ~/kuku_lab/robot_control
-tests/run_humble_split_bringup.sh             # 정적 테스트 + 분리 구조 + Quest(합성) + real 대역
+tests/run_humble_split_bringup.sh             # 정적 테스트 + 분리 구조 + Quest(합성) + glove(합성) + real 대역
 tests/run_humble_fake_motion_regression.sh    # 이전 단일 CM fake 회귀 (Stage 6)
 ```
 
-각각 `SPLIT_BRINGUP_PROBE=PASS`, `QUEST_TELEOP_PROBE=PASS`,
-`QUEST_TELEOP_REAL_DOUBLE_PROBE=PASS`, `FAKE_MOTION_PROBE=PASS`가 나와야 한다. 컨테이너는
+각각 `SPLIT_BRINGUP_PROBE=PASS`, `QUEST_TELEOP_PROBE=PASS`, `GLOVE_FAKE_PROBE=PASS`,
+`QUEST_TELEOP_REAL_DOUBLE_PROBE=PASS`, `FAKE_MOTION_PROBE=PASS`가 나와야 한다. glove 회귀는
+`third_party/inspire_hand_senseglove_teleop`(vendored retarget 노드)이 있어야 한다. 컨테이너는
 network none, 장치 없음, 권한 없음으로 실행되며, kuku_lab은 읽기 전용으로 마운트된다.
 
 ## 5. fake + RViz 실행
@@ -94,6 +95,7 @@ ros2 launch openarm_bringup openarm_rh56f1_arms.launch.py runtime:=fake use_rviz
 # 터미널 C, D (선택): 손별 fake CM
 ros2 launch openarm_bringup rh56f1_right_hand.launch.py
 ros2 launch openarm_bringup rh56f1_left_hand.launch.py
+# 글러브(합성 또는 실제) → fake 손: docs/rh56f1-glove-fake.md
 ```
 
 컨테이너는 스크립트 위치에서 `kuku_lab`을 찾아 `/workspace/kuku_lab`에 마운트하고

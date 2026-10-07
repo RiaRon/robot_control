@@ -119,6 +119,25 @@ def model_description(runtime: str, source_urdf: Path, manifest: Path | None = N
     return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
 
+def prime_fake_trajectory_controllers(spawner, manager: str, controllers: list[str]):
+    """Launch action: once *spawner* exits, run fake_trajectory_controller_prime.py.
+
+    joint_trajectory_controller 2.47.0 can start with its pending-goal flag
+    uninitialised and then silently drop topic trajectories; one finished
+    hold-at-measured action goal clears it (see the script). Fake managers only.
+    """
+    from launch.actions import RegisterEventHandler
+    from launch.event_handlers import OnProcessExit
+    from launch_ros.actions import Node
+
+    return RegisterEventHandler(OnProcessExit(target_action=spawner, on_exit=[Node(
+        package="openarm_bringup",
+        executable="fake_trajectory_controller_prime.py",
+        arguments=[*controllers, "--controller-manager", manager],
+        output="both",
+    )]))
+
+
 def fake_arm_description(source_urdf: Path, wrapper_xacro: Path) -> str:
     """Integrated model + the 14 arm joints on GenericSystem, nothing else.
 

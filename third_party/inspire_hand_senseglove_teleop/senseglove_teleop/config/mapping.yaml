@@ -1,0 +1,16 @@
+# senseglove_teleop 실측 매핑 보정값.
+# (monitor_glove.py 자동 캘리브레이션에 의해 생성됨: 2026-09-28 12:54:30)
+/**:
+  ros__parameters:
+    pinky_zero_rad: 1.2922
+    pinky_range_rad: 0.4531
+    ring_zero_rad: 1.2922
+    ring_range_rad: 0.4531
+    middle_zero_rad: 1.3084
+    middle_range_rad: 0.4369
+    index_zero_rad: 1.1382
+    index_range_rad: 0.5848
+    thumb_pitch_zero_rad: 0.3598
+    thumb_pitch_range_rad: 0.2188
+    thumb_yaw_zero_rad: 0.1032
+    thumb_yaw_range_rad: 0.4601

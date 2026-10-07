@@ -1,0 +1,16 @@
+name: inspire_hand_senseglove_teleop
+source: inspire_hand-main.zip provided by the user (older version of a colleague's code; not a git checkout)
+source_zip_sha256: f913098487cecbe588e4fb6d0cc75d9bd7bef635b5ee5234606c540038035668
+source_subpath: inspire_hand-main/senseglove_teleop
+imported_at: 2026-10-03
+license: MIT  # declared in the original senseglove_teleop/package.xml and setup.py; the zip has no top-level LICENSE file
+purpose: retarget logic only (mapping.py, retarget_node.py, its calibration and tests), run unmodified as a separate ROS node
+not_vendored: package.xml, setup.py, setup.cfg, hand_bridge_node.py, hand_protocol.py, tactile_visualizer.py, launch/, the repository's real-hand scripts and logs
+local_modifications: []
+files:
+  senseglove_teleop/README.md: cb56e3c087d118fd93a4d61ff612f303b7c4028e525a71a090d2b805f57c3fd0
+  senseglove_teleop/config/mapping.yaml: f91ebc8f1f43acc42e3fe5f0e55c522e75d622fb8a95036f2075afcf2487406d
+  senseglove_teleop/senseglove_teleop/__init__.py: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  senseglove_teleop/senseglove_teleop/mapping.py: 308963d99aaa080f4d18ec8c8abb3de7ad237883227886dcdb388fb8405fe9b4
+  senseglove_teleop/senseglove_teleop/retarget_node.py: ad6db7cff34cffd31947d879d83ec4b403c1421895c8c4f9569cea8b3f0a121b
+  senseglove_teleop/tests/test_mapping.py: d75bbe487ecbddebe6fc8665b867d1cfcd851bbf12de4138bfb3a47428111ea1

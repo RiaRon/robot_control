@@ -296,7 +296,7 @@ def test_device_lock_is_exclusive_across_processes(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------- launch structure
-def _launch_nodes(file, **values):
+def _launch_nodes(file, with_handlers=False, **values):
     pytest.importorskip("launch")
     ament = pytest.importorskip("ament_index_python.packages")
     try:
@@ -319,7 +319,10 @@ def _launch_nodes(file, **values):
     context.launch_configurations.update(values)
     from launch_ros.actions import Node
 
-    return [action for action in module._setup(context) if isinstance(action, Node)]
+    actions = module._setup(context)
+    if with_handlers:
+        return actions
+    return [action for action in actions if isinstance(action, Node)]
 
 
 def _node_info(node):
@@ -381,6 +384,57 @@ def test_hand_launch_owns_its_namespaced_manager_only(side, tmp_path, monkeypatc
     assert {n[0] for n in nodes} == {"ros2_control_node", "spawner"}
     with pytest.raises(RuntimeError, match="no real hand backend"):
         _launch_nodes("rh56f1_hand.launch.py", side=side, runtime="real", check_ownership="false")
+
+
+def _primers(actions):
+    """(spawner arguments, primer arguments) of each prime-after-spawner handler."""
+    from launch.actions import RegisterEventHandler
+    from launch.event_handlers import OnProcessExit
+    from launch_ros.actions import Node
+
+    nodes = [a for a in actions if isinstance(a, Node)]
+    found = []
+    for action in actions:
+        handler = getattr(action, "event_handler", None)
+        if isinstance(action, RegisterEventHandler) and isinstance(handler, OnProcessExit):
+            target = handler._OnActionEventBase__action_matcher  # the action itself here
+            [spawner] = [_node_info(n) for n in nodes if n is target]
+            for node in handler._OnActionEventBase__actions_on_event:
+                found.append((spawner[0], spawner[2], *_node_info(node)[::2]))
+    return found
+
+
+def test_fake_trajectory_controllers_are_primed_after_spawning(tmp_path, monkeypatch):
+    """joint_trajectory_controller 2.47.0 drops topic commands until one goal finished."""
+    monkeypatch.setenv(device_guard.LOCK_DIR_ENV, str(tmp_path))
+    arms = _primers(_launch_nodes("openarm_rh56f1_arms.launch.py", with_handlers=True,
+                                  check_ownership="false"))
+    assert arms == [(
+        "spawner",
+        ["left_joint_trajectory_controller", "right_joint_trajectory_controller",
+         "--controller-manager", "/controller_manager"],
+        "fake_trajectory_controller_prime.py",
+        ["left_joint_trajectory_controller", "right_joint_trajectory_controller",
+         "--controller-manager", "/controller_manager"])]
+    for side in split.SIDES:
+        manager = f"/rh56f1_{side}/controller_manager"
+        hand = _primers(_launch_nodes("rh56f1_hand.launch.py", with_handlers=True, side=side,
+                                      check_ownership="false"))
+        assert hand == [("spawner", [f"{side}_hand_trajectory_controller", "--controller-manager",
+                                     manager],
+                         "fake_trajectory_controller_prime.py",
+                         [f"{side}_hand_trajectory_controller", "--controller-manager", manager])]
+    real = _primers(_launch_nodes("openarm_rh56f1_arms.launch.py", with_handlers=True,
+                                  runtime="real", check_ownership="false",
+                                  i_understand_this_moves_real_hardware="true"))
+    assert real == []  # nothing is commanded on real hardware at launch
+
+
+def test_primer_refuses_anything_but_generic_system():
+    text = (LAUNCH_DIR.parent / "scripts/fake_trajectory_controller_prime.py").read_text()
+    assert 'FAKE_PLUGIN = "mock_components/GenericSystem"' in text
+    assert "if plugins != {FAKE_PLUGIN}:" in text
+    assert "positions=positions" in text and "measured.feedback.positions" in text
 
 
 def test_model_launch_is_the_only_tf_publisher_and_reads_the_display_topic():

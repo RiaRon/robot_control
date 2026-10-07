@@ -22,7 +22,9 @@ integrated geometry plus only this hand's ros2_control block), so it needs no
 other process to start.
 
 runtime:=fake  mock_components/GenericSystem, canonical joint names,
-               <side>_hand_trajectory_controller active.
+               <side>_hand_trajectory_controller active, then held once at
+               its measured position (fake_trajectory_controller_prime.py) so
+               it accepts topic commands.
 runtime:=real  refused: there is no hand backend in this bringup yet. See
                docs/openarm-rh56f1-split-bringup.md for what a backend must
                provide to be connected here.
@@ -49,6 +51,7 @@ from rh56f1_split_description import (  # noqa: E402
     controller_manager,
     fake_hand_controllers,
     fake_hand_description,
+    prime_fake_trajectory_controllers,
 )
 
 
@@ -104,6 +107,9 @@ def _setup(context: LaunchContext):
             executable="spawner",
             arguments=[name, "--controller-manager", manager],
         ))
+    # Topic commands (the glove adapter) are dropped by a fresh
+    # joint_trajectory_controller 2.47.0 until it has finished one action goal.
+    nodes.append(prime_fake_trajectory_controllers(nodes[-1], manager, [FAKE_HAND_CONTROLLERS[side]]))
     return nodes
 
 

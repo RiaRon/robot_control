@@ -22,7 +22,9 @@ that builds ``/joint_states``. Pass ``start_model:=false`` when that runs on its
 own.
 
 runtime:=fake  mock_components/GenericSystem, trajectory controllers active
-               (right/left_joint_trajectory_controller, canonical joint names)
+               (right/left_joint_trajectory_controller, canonical joint names),
+               then held once at their measured position
+               (fake_trajectory_controller_prime.py) so they accept topic commands.
 runtime:=real  OpenArmHW with the integrated real bringup's safety file and
                startup policy: components inactive, controllers
                (rh56f1_<side>_arm_controller) loaded inactive, nothing moves at
@@ -57,6 +59,7 @@ from rh56f1_split_description import (  # noqa: E402
     RUNTIMES,
     controller_manager,
     fake_arm_description,
+    prime_fake_trajectory_controllers,
     real_arm_description,
 )
 
@@ -162,6 +165,10 @@ def _setup(context: LaunchContext):
             executable="spawner",
             arguments=[*arguments, "--controller-manager", manager],
         ))
+    if runtime == "fake":
+        # Topic commands (Quest teleop) are dropped by a fresh
+        # joint_trajectory_controller 2.47.0 until it has finished one action goal.
+        nodes.append(prime_fake_trajectory_controllers(nodes[-1], manager, spawners[-1]))
     return nodes
 
 
