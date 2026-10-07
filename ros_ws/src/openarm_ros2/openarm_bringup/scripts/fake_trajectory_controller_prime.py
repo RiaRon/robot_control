@@ -85,7 +85,8 @@ def main(argv: list[str] | None = None) -> int:
     components = call(ListHardwareComponents, f"{manager}/list_hardware_components")
     if components is None:
         return fail(f"{manager} does not answer")
-    plugins = {c.class_type for c in components.component}
+    # Jazzy moved the plugin to plugin_name (class_type is deprecated and empty); Humble has class_type only.
+    plugins = {getattr(c, "plugin_name", "") or c.class_type for c in components.component}
     if plugins != {FAKE_PLUGIN}:
         return fail(f"refusing: {manager} runs {sorted(plugins)}, not only {FAKE_PLUGIN}")
 
