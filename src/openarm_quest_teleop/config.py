@@ -286,5 +286,44 @@ def _solver(urdf, teleop: dict, binding: ArmBinding, lower, upper, velocity):
     return solver.solve
 
 
+#: How the arm is brought to its start pose before following, when the config
+#: or the command line names one (``teleop.start_pose``).
+START_POSE_DEFAULTS = {"name": None, "speed_rad_s": 0.3, "min_duration_sec": 3.0,
+                       "tolerance_rad": 0.02}
+
+
+def start_pose_settings(config: dict) -> dict:
+    return {**START_POSE_DEFAULTS, **(config["teleop"].get("start_pose") or {})}
+
+
+def start_pose_for(profile: RobotProfile, binding: ArmBinding, name: str,
+                   path: str | Path | None = None) -> np.ndarray:
+    """This arm's joints (canonical order) of pose *name* in the profile's pose store
+    (``poses/<profile>.yaml``, robot_control.poses), checked against the limits."""
+    from robot_control.poses import PoseStoreError, default_poses_path, load_poses, pose_values
+
+    path = Path(path) if path else default_poses_path(profile.name)
+    try:
+        store = load_poses(path, profile.name)
+        if name not in store:
+            raise ConfigError(f"no pose {name!r} in {path}; it has {sorted(store)}")
+        q = pose_values(store[name], profile.groups[binding.group])
+    except PoseStoreError as error:
+        raise ConfigError(str(error)) from error
+    joints = {joint.canonical: joint for joint in profile.joints}
+    outside = [n for n, v in zip(binding.canonical_names, q)
+               if not joints[n].lower <= v <= joints[n].upper]
+    if outside:
+        raise ConfigError(f"start pose {name!r} is outside the limits of {outside}")
+    return q
+
+
+def start_motion_duration(current: np.ndarray, goal: np.ndarray, settings: dict) -> float:
+    """Slow, joint-space move: the largest joint change at speed_rad_s, at least
+    min_duration_sec."""
+    largest = float(np.max(np.abs(np.asarray(goal) - np.asarray(current))))
+    return max(float(settings["min_duration_sec"]), largest / float(settings["speed_rad_s"]))
+
+
 def load_profile_for(config: dict) -> RobotProfile:
     return load_builtin_profile(config["teleop"]["profile"])

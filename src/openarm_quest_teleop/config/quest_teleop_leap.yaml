@@ -81,6 +81,15 @@ teleop:
     posture_cost: 0.001
     lm_damping: 1.0e-6
     solver: daqp
+  # Before following, ros_teleop moves the arm to this pose of the profile's pose
+  # store (robot_control poses/<profile>.yaml) in one slow joint-space goal, checks
+  # it arrived, and only then starts the teleop loop. --start-pose NAME overrides,
+  # --no-start-pose skips; a dry run only reports the move.
+  start_pose:
+    name: rh56f1_aglt_home   # RH56F1 robot home (sim2real rh56f1_aglt.yaml)
+    speed_rad_s: 0.3        # largest joint change / this = move duration
+    min_duration_sec: 3.0
+    tolerance_rad: 0.02     # every joint this close to the pose after the move
   arms:
     right:
       group: openarm_right_arm

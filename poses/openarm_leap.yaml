@@ -1,0 +1,27 @@
+schema: 1
+profile: openarm_leap
+poses:
+  rh56f1_aglt_home:
+    groups:
+    - openarm_right_arm
+    - openarm_left_arm
+    # sim2real origin/main deploy/policy_control/config/homes/rh56f1_aglt.yaml (2f8a803, 09-29):
+    # the RH56F1 robot's home = hdgp rh_aglt arm_start_q (right), left = mirror
+    # (-,-,-,+,-,-,-). Used by the RH56F1 mission home/rehome steps through 10-06.
+    saved_at: 2026-10-08 from sim2real config/homes/rh56f1_aglt.yaml (2f8a803)
+    gravity: null
+    joints:
+      r_aj_1: -1.2127
+      r_aj_2: 0.2026
+      r_aj_3: 0.6538
+      r_aj_4: 1.7608
+      r_aj_5: 0.3791
+      r_aj_6: 0.5785
+      r_aj_7: 0.6646
+      l_aj_1: 1.2127
+      l_aj_2: -0.2026
+      l_aj_3: -0.6538
+      l_aj_4: 1.7608
+      l_aj_5: -0.3791
+      l_aj_6: -0.5785
+      l_aj_7: -0.6646

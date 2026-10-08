@@ -11,6 +11,7 @@ import sys
 
 import numpy as np
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch"
@@ -140,3 +141,53 @@ def test_both_teleop_configs_carry_pink_settings():
     for path in (DEFAULT_CONFIG, LEAP_CONFIG):
         teleop = load_config(path)["teleop"]
         assert "ik_backend" not in teleop and teleop["pink"]["solver"] == "daqp"
+
+
+# ------------------------------------------------------------ start pose
+SIM2REAL_AGLT = {  # sim2real deploy/policy_control/config/homes/rh56f1_aglt.yaml (2f8a803)
+    "right": [-1.2127, 0.2026, 0.6538, 1.7608, 0.3791, 0.5785, 0.6646],
+    "left": [1.2127, -0.2026, -0.6538, 1.7608, -0.3791, -0.5785, -0.6646],
+}
+
+
+@pytest.mark.parametrize("arm", ["right", "left"])
+def test_start_pose_is_the_rh56f1_robot_home(urdf, setup, arm):
+    from openarm_quest_teleop.config import start_pose_for, start_pose_settings
+
+    config, profile, _ = setup
+    assert start_pose_settings(config)["name"] == "rh56f1_aglt_home"
+    binding = bind_arm(urdf, profile, config, arm)
+    q = start_pose_for(profile, binding, "rh56f1_aglt_home")
+    assert np.allclose(q, SIM2REAL_AGLT[arm])
+    mirror = np.array([-1, -1, -1, 1, -1, -1, -1])
+    assert np.allclose(np.array(SIM2REAL_AGLT["left"]), mirror * SIM2REAL_AGLT["right"])
+
+
+def test_start_pose_refuses_unknown_names_and_poses_outside_the_limits(urdf, setup, tmp_path):
+    from openarm_quest_teleop.config import start_pose_for
+
+    _, profile, binding = setup
+    with pytest.raises(ConfigError, match="no pose 'nowhere'"):
+        start_pose_for(profile, binding, "nowhere")
+    store = tmp_path / "poses.yaml"
+    joints = {f"r_aj_{i}": 0.0 for i in range(1, 8)} | {"r_aj_4": 3.0}  # elbow past 2.44
+    store.write_text(yaml.safe_dump({"schema": 1, "profile": "openarm_leap", "poses": {
+        "bad": {"groups": ["openarm_right_arm"], "saved_at": "test", "gravity": None,
+                "joints": joints}}}))
+    with pytest.raises(ConfigError, match=r"outside the limits of \['r_aj_4'\]"):
+        start_pose_for(profile, binding, "bad", store)
+
+
+def test_start_move_is_slow_and_never_shorter_than_the_minimum(setup):
+    from openarm_quest_teleop.config import start_motion_duration, start_pose_settings
+
+    settings = start_pose_settings(setup[0])
+    home = np.array(SIM2REAL_AGLT["right"])
+    assert start_motion_duration(np.zeros(7), home, settings) == pytest.approx(1.7608 / 0.3)
+    assert start_motion_duration(home, home, settings) == 3.0
+
+
+def test_the_rh56f1_config_names_no_start_pose():
+    from openarm_quest_teleop.config import start_pose_settings
+
+    assert start_pose_settings(load_config(DEFAULT_CONFIG))["name"] is None

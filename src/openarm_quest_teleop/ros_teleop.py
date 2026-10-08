@@ -14,6 +14,13 @@ also requires ``--confirm-real-hardware``; without it, it refuses to start in
 execute mode. Without ``--execute`` it runs the whole pipeline and reports
 what it would do on ``<prefix>/<arm>/status``.
 
+Before following, the arm is brought to its start pose when one is named
+(``teleop.start_pose.name`` in the config, ``--start-pose`` on the command line,
+``--no-start-pose`` to skip): one slow joint-space FollowJointTrajectory goal from
+the measured joints, then a check that the arm is there. Only then does the
+teleop loop start, so the enable input cannot engage before the arm has arrived.
+A dry run reports the move and does not make it.
+
 Following starts when the enable input is pressed and stops when it is
 released; see ``teleop.py`` for the rules.
 """
@@ -36,6 +43,9 @@ from .config import (
     controller_for,
     execution_refusal,
     runtime_endpoint,
+    start_motion_duration,
+    start_pose_for,
+    start_pose_settings,
     load_config,
     load_profile_for,
 )
@@ -74,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="publish joint commands (default: dry run)")
     parser.add_argument("--confirm-real-hardware", action="store_true",
                         help="required with --execute when the arm is not fake hardware")
+    parser.add_argument("--start-pose",
+                        help="pose (poses/<profile>.yaml) to move the arm to before following; "
+                             "default: teleop.start_pose.name in the config")
+    parser.add_argument("--no-start-pose", action="store_true",
+                        help="follow from wherever the arm is")
+    parser.add_argument("--poses", help="pose store (default: poses/<profile>.yaml)")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -82,7 +98,9 @@ def main(argv: list[str] | None = None) -> int:
 
     import rclpy
     from builtin_interfaces.msg import Duration
+    from control_msgs.action import FollowJointTrajectory
     from controller_manager_msgs.srv import ListControllers
+    from rclpy.action import ActionClient
     from geometry_msgs.msg import PoseStamped
     from rcl_interfaces.srv import GetParameters
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, qos_profile_sensor_data
@@ -317,6 +335,51 @@ def main(argv: list[str] | None = None) -> int:
                 "palm_xyz": None if palm is None else [float(v) for v in palm[:3, 3]],
             }
             status_publisher.publish(String(data=json.dumps(status)))
+
+    # --------------------------------------------------------- the start pose
+    start = start_pose_settings(config)
+    start_name = None if args.no_start_pose else (args.start_pose or start["name"])
+    if start_name:
+        try:
+            goal_q = start_pose_for(profile, binding, start_name, args.poses)
+        except ConfigError as error:
+            return fail(str(error))
+        if not spin_until(lambda: latest["joints"] is not None, STARTUP_TIMEOUT_SEC):
+            return fail("no arm joint state to start the move to the start pose from")
+        duration = start_motion_duration(latest["joints"].q, goal_q, start)
+        if not args.execute:
+            log.info(f"DRY RUN: would move to start pose {start_name} over {duration:.1f} s; "
+                     "following from the current pose instead")
+        else:
+            log.info(f"moving to start pose {start_name} over {duration:.1f} s "
+                     f"({[round(float(v), 4) for v in goal_q]})")
+            client = ActionClient(node, FollowJointTrajectory,
+                                  f"/{controller}/follow_joint_trajectory")
+            if not client.wait_for_server(timeout_sec=STARTUP_TIMEOUT_SEC):
+                return fail(f"no follow_joint_trajectory action on {controller}")
+            goal = FollowJointTrajectory.Goal()
+            goal.trajectory.joint_names = list(binding.runtime_names)
+            point = JointTrajectoryPoint()
+            point.positions = binding.to_runtime(goal_q)
+            point.time_from_start = Duration(sec=int(duration),
+                                             nanosec=int((duration % 1.0) * 1e9))
+            goal.trajectory.points.append(point)
+            sent = client.send_goal_async(goal)
+            if not spin_until(sent.done, STARTUP_TIMEOUT_SEC) or not sent.result().accepted:
+                return fail(f"{controller} did not accept the move to {start_name}")
+            done = sent.result().get_result_async()
+            if not spin_until(done.done, duration + STARTUP_TIMEOUT_SEC):
+                return fail(f"the move to {start_name} did not finish")
+            if done.result().result.error_code != 0:
+                return fail(f"the move to {start_name} failed: "
+                            f"{done.result().result.error_string}")
+            arrived = latest["joints"].q if latest["joints"] else None
+            if not spin_until(lambda: latest["joints"] is not None and float(np.max(np.abs(
+                    latest["joints"].q - goal_q))) <= float(start["tolerance_rad"]), 2.0):
+                error = None if arrived is None else float(np.max(np.abs(arrived - goal_q)))
+                return fail(f"the arm is not at {start_name} after the move "
+                            f"(largest error {error} rad)")
+            log.info(f"at start pose {start_name}; press the enable input to follow")
 
     node.create_timer(1.0 / profile.endpoint().command_rate_hz, tick)
     try:

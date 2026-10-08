@@ -13,8 +13,8 @@ Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy
 
 | 항목 | 상태 |
 |---|---|
-| pink IK 단위 테스트, 원격조종 코어 (ROS 없음) | `tests/test_quest_teleop_leap_pink.py` 7개 통과 |
-| 합성 Quest → bridge → pink teleop → fake 팔 (Jazzy) | `tests/jazzy_leap_quest_teleop_probe.py` 15개 항목 PASS |
+| pink IK, 원격조종 코어, 시작 자세 (ROS 없음) | `tests/test_quest_teleop_leap_pink.py` 12개 통과 |
+| 합성 Quest → bridge → pink teleop → fake 팔 (Jazzy), 시작 자세 이동 포함 | `tests/jazzy_leap_quest_teleop_probe.py` 17개 항목 PASS |
 | 실제 Quest 헤드셋 | 미검증 |
 | 실제 OpenArm, 실제 LEAP | **없음.** LEAP 설정에는 fake 런타임만 있다 |
 
@@ -68,16 +68,10 @@ CFG=src/openarm_quest_teleop/config/quest_teleop_leap.yaml
 # 터미널 A: fake 팔 + 모델 + RViz (손은 선택: leap_hand.launch.py side:=right)
 ros2 launch openarm_bringup openarm_leap_arms.launch.py use_rviz:=true
 
-# 터미널 B: 오른팔을 굽힌 시작 자세로 (fake 전용 값)
-ros2 action send_goal /right_joint_trajectory_controller/follow_joint_trajectory \
-  control_msgs/action/FollowJointTrajectory "{trajectory: {joint_names:
-  [r_aj_1, r_aj_2, r_aj_3, r_aj_4, r_aj_5, r_aj_6, r_aj_7], points: [{positions:
-  [0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0], time_from_start: {sec: 2}}]}}"
-
-# 터미널 C: Quest UDP → ROS
+# 터미널 B: Quest UDP → ROS
 .venv/bin/python -m openarm_quest_teleop.ros_bridge --config $CFG
 
-# 터미널 D: 원격조종 (먼저 dry run, 이상 없으면 --execute)
+# 터미널 C: 원격조종 (먼저 dry run, 이상 없으면 --execute: 시작 자세로 옮긴 뒤 grip을 기다린다)
 .venv/bin/python -m openarm_quest_teleop.ros_teleop --config $CFG --arm right --runtime fake
 .venv/bin/python -m openarm_quest_teleop.ros_teleop --config $CFG --arm right --runtime fake --execute
 
@@ -88,7 +82,26 @@ ros2 topic echo /quest_teleop/right/status
 
 - 실제 Quest 앱은 이 PC의 UDP 5006으로 보낸다(설정 `quest.udp`).
 - 왼팔은 `--arm left`다. 한 프로세스에 한 팔이다.
-- **완전히 편 영점 자세(팔이 곧게 아래로)에서는 시작하지 말 것.** 특이 자세라 IK가 빠져나오지 못한다. 위처럼 굽힌 자세에서 grip을 누른다. 필요하면 설정의 `min_enable_singular_value`로 영점 근처에서 연결을 거부하게 할 수 있다(현재 0 = 꺼짐).
+- **시작 자세:** `--execute`로 띄우면 grip을 받기 전에 그 팔을 `rh56f1_aglt_home`으로 먼저 옮긴다.
+  - 이 자세는 RH56F1 로봇의 홈이다. 출처는 sim2real `deploy/policy_control/config/homes/rh56f1_aglt.yaml`(`2f8a803`, 9/29)로, hdgp `rh_aglt` 시작 자세이고 왼팔은 거울이다. 10/06까지 RH56F1 미션의 home·rehome 단계가 이 자세를 썼다.
+  - 값은 robot_control `poses/openarm_leap.yaml`에 있다.
+  - 이동 방식: 측정 자세에서 FollowJointTrajectory 한 번. 가장 많이 움직이는 관절 기준 0.3 rad/s, 최소 3초. 도착(모든 관절 0.02 rad 이내)을 확인한 뒤에만 원격조종 루프가 시작된다.
+  - 설정은 `teleop.start_pose`다. `--start-pose NAME`으로 바꾸고, `--no-start-pose`로 건너뛴다. dry run은 움직이지 않고 "옮길 예정"만 알린다.
+  - 완전히 편 영점 자세(팔이 곧게 아래로)는 특이 자세라 IK가 빠져나오지 못한다. `--no-start-pose`로 영점에서 시작하지 말 것.
+
+### 시작 자세 주변의 작업 공간 (녹화 때 확인)
+
+`rh56f1_aglt_home`은 RH56F1 과제용 자세라, LEAP로 원격조종할 때 여유가 작은 관절이 있다.
+같은 동작을 ROS 없이 원격조종 코어에 넣어 재현해 확인했다.
+
+- **손목 `aj_6`:** 0.58 rad라 한계 0.785까지 약 0.2 rad(12°)만 남는다. 그 방향으로 손목을 30° 돌리면 한계에 걸리고, IK가 "닿지 않음"으로 명령을 멈춘다. 반대 방향은 여유가 크다.
+- **팔꿈치 `aj_4`:** 1.76 rad이고 완전히 접힌 2.443까지 0.68 rad가 남는다. 손을 위·몸 안쪽으로 크게 옮기면 손바닥이 어깨에 가까워져 팔꿈치가 한계에 닿는다. 그때 IK는 다른 관절을 크게 재배치해야 하는 해(시드에서 0.5 rad 초과)를 거부하고, 팔은 마지막 명령 자세를 유지한다.
+- 이 두 경우는 **의도된 안전 동작**이다. 팔이 튀지 않고 멈춘다.
+- 녹화 동작(앞 10 cm, 바깥 6 cm, 아래 6 cm, 손목 −20°/+20°, 반지름 5 cm 원)은 양팔 모두 IK 실패와 속도 제한 0회였다. 관절 여유는 최소 0.084 rad였다.
+
+녹화: `figure/openarm_leap_pink_quest_teleop.{mp4,webm}` (약 28초, 20 fps, RViz, 회전 추종 모드).
+- 영점 → 시작 자세(5.9초) → 합성 Quest 양손 입력.
+- 양손 목표 자세(`/quest_teleop/<arm>/target_pose`)를 좌표축으로 표시해, 손바닥이 그 축을 따라가는 것이 보인다.
 
 ## 4. 테스트
 
@@ -100,7 +113,7 @@ ROS_DOMAIN_ID=176 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST .venv/bin/python tests
 ```
 
 probe는 UDP 15006을 쓴다(실제 앱의 5006과 겹치지 않게). 확인 항목은 다음과 같다.
-- 팔 controller active, 시작 자세 도달
+- 팔 controller active, 영점에서 출발 → teleop이 시작 자세로 이동(약 5.9초, 오차 0.02 rad 이내), 도착 전에는 연결 안 됨
 - teleop이 pink와 `r_hl_palm`으로 실행되는지
 - 연결 1회, 명령 스트리밍, IK 오차 허용 범위 안, IK 실패 없음
 - 손바닥이 앞·왼쪽·위로 각 5 cm 따라가고, 목표와의 차이가 1 cm 미만, 끝나면 원위치

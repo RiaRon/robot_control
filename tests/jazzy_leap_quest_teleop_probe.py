@@ -3,7 +3,8 @@
 
     openarm_leap_arms.launch.py                     fake arms + model (Jazzy)
     openarm_quest_teleop.ros_bridge  (UDP :15006)    Quest packets -> /quest/* topics
-    openarm_quest_teleop.ros_teleop  --execute      quest_teleop_leap.yaml: palm r_hl_palm, pink IK
+    openarm_quest_teleop.ros_teleop  --execute      quest_teleop_leap.yaml: palm r_hl_palm, pink IK,
+                                                    first moves the arm to rh56f1_aglt_home
     openarm_quest_teleop.synth --scenario axes      grip, 5 cm forward/back, left/back, up/back, release
 
 Run from robot_control with ROS 2 Jazzy and ros_ws/install sourced, the pink venv
@@ -29,22 +30,20 @@ import time
 
 import numpy as np
 import rclpy
-from rclpy.action import ActionClient
 from rclpy.duration import Duration as RclpyDuration
 from rclpy.time import Time
 
-from builtin_interfaces.msg import Duration
-from control_msgs.action import FollowJointTrajectory
 from controller_manager_msgs.srv import ListControllers
+from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 import tf2_ros
-from trajectory_msgs.msg import JointTrajectoryPoint
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "src/openarm_quest_teleop/config/quest_teleop_leap.yaml"
 VENV_PYTHON = ROOT / ".venv/bin/python"
 PORT = "15006"
-BENT = [0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0]
+#: rh56f1_aglt_home, right arm (poses/openarm_leap.yaml = sim2real rh56f1_aglt.yaml)
+HOME = np.array([-1.2127, 0.2026, 0.6538, 1.7608, 0.3791, 0.5785, 0.6646])
 FAILED: list[str] = []
 
 
@@ -132,19 +131,12 @@ def main() -> int:
         check("right_arm_primed", spin_until(
             lambda: "right_joint_trajectory_controller: held at its measured position"
             in processes[0].text(), 30.0))
-        client = ActionClient(node, FollowJointTrajectory,
-                              "/right_joint_trajectory_controller/follow_joint_trajectory")
-        client.wait_for_server(timeout_sec=10.0)
-        goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = [f"r_aj_{i}" for i in range(1, 8)]
-        goal.trajectory.points = [JointTrajectoryPoint(positions=BENT, time_from_start=Duration(sec=2))]
-        sent = client.send_goal_async(goal)
-        rclpy.spin_until_future_complete(node, sent, timeout_sec=10.0)
-        result = sent.result().get_result_async()
-        rclpy.spin_until_future_complete(node, result, timeout_sec=10.0)
-        spin_until(lambda: False, 0.5)
-        check("bent_start_pose_reached", result.result().result.error_code == 0,
-              result.result().result.error_string)
+        joints = {}
+        node.create_subscription(JointState, "/openarm/joint_states",
+                                 lambda m: joints.update(zip(m.name, m.position)), 10)
+        spin_until(lambda: "r_aj_1" in joints, 10.0)
+        right = [f"r_aj_{i}" for i in range(1, 8)]
+        check("arm_starts_at_zero", np.allclose([joints[n] for n in right], 0.0, atol=1e-3))
 
         processes.append(Process("bridge", [py, "-m", "openarm_quest_teleop.ros_bridge",
                                             "--config", str(CONFIG), "--port", PORT]))
@@ -154,6 +146,18 @@ def main() -> int:
         check("teleop_started_executing_with_pink_on_the_leap_palm", spin_until(
             lambda: "EXECUTING" in processes[-1].text(), 40.0),
             next((l for l in processes[-1].text().splitlines() if "palm frame" in l), "")[-160:])
+        moving_at = time.monotonic() if spin_until(
+            lambda: "moving to start pose rh56f1_aglt_home" in processes[-1].text(), 20.0) else None
+        arrived = spin_until(lambda: "at start pose rh56f1_aglt_home" in processes[-1].text(), 30.0)
+        took = time.monotonic() - moving_at if moving_at else float("nan")
+        spin_until(lambda: False, 0.3)
+        q_home = np.array([joints[n] for n in right])
+        check("teleop_moved_the_arm_to_the_start_pose_first", moving_at is not None and arrived
+              and np.allclose(q_home, HOME, atol=0.02) and took >= 1.7608 / 0.3 - 0.5,
+              f"took {took:.1f} s, largest error {np.max(np.abs(q_home - HOME)):.4f} rad")
+        log = processes[-1].text()
+        check("no_following_before_arrival",
+              "state engaged" not in log[:log.index("at start pose")] if arrived else False)
         spin_until(lambda: palm() is not None and palm("l_hl_palm") is not None, 10.0)
         start, left_start = palm(), palm("l_hl_palm")
 
