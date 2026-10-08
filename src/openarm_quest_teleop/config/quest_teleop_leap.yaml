@@ -1,0 +1,103 @@
+# Quest controller -> OpenArm arm teleoperation, OpenArm + LEAP Hand on ROS 2 Jazzy,
+# IK solved by pink (Pinocchio QP differential IK). Same keys as quest_teleop.yaml;
+# only the teleop block differs. Pass it with --config to ros_bridge, ros_teleop,
+# monitor and synth, and run ros_teleop with robot_control/.venv/bin/python
+# (docs/quest-teleop-leap-pink.md).
+
+quest:
+  udp:
+    host: 0.0.0.0          # address this PC listens on
+    port: 5006             # the Quest app's default
+  # Poses are published in this frame: Unity world re-expressed in the ROS
+  # convention (x forward, y left, z up). It is not connected to the robot's
+  # TF tree; the teleop uses only motion relative to the enable instant.
+  frame_id: quest_world
+  publish_rate_hz: 200     # upper bound; a packet is published once, when new
+  smoothing:               # upstream One Euro filter, optional
+    enabled: false
+    min_cutoff: 2.0
+    beta: 0.04
+    d_cutoff: 1.5
+    max_linear_speed: 1.0
+    max_angular_speed: 6.0
+  topics:
+    left: {pose: /quest/left/pose, joy: /quest/left/joy}
+    right: {pose: /quest/right/pose, joy: /quest/right/joy}
+    reference_pose: /quest/reference/pose
+    status: /quest/status
+
+teleop:
+  profile: openarm_leap    # robot_control profile: joint names, order, limits
+  joint_states_topic: /joint_states
+  # Jazzy's arm controller manager has no robot_description parameter; its
+  # description (with the arm ros2_control block) is latched here by
+  # openarm_leap_arms.launch.py. /robot_description is the model for TF only.
+  robot_description_topic: /openarm_leap/arms/robot_description
+  status_topic_prefix: /quest_teleop   # /quest_teleop/<arm>/status, .../target_pose
+  input_timeout_sec: 0.2
+  joint_state_timeout_sec: 0.2
+  enable:
+    source: grip           # grip | trigger | button_primary | button_secondary
+    press_threshold: 0.7
+    release_threshold: 0.3
+  position_scale: 1.0
+  # Rows are the robot base axes written in quest_world axes. Identity means
+  # controller forward/left/up moves the palm along base +x/+y/+z.
+  axis_mapping:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    - [0.0, 0.0, 1.0]
+  heading:
+    # world: quest_world's forward is the robot's forward (recenter the Quest
+    #   facing the way the robot faces, or set yaw_offset_deg).
+    # reference: forward is the heading of the packet's rf pose at enable.
+    mode: world
+    yaw_offset_deg: 0.0
+  orientation_mode: hold   # hold: keep the palm orientation it had at enable
+                           # relative: also follow the controller's rotation
+  max_target_offset_m: 0.4 # palm target is kept within this distance of its
+                           # pose at enable
+  # Enabling is refused at a singular arm pose (e.g. hanging straight down);
+  # 0 disables the check.
+  min_enable_singular_value: 0.0
+  max_input_jump_m: 0.1
+  max_input_jump_rad: 0.5
+  stream_horizon_sec: 0.0  # time_from_start of each streamed point
+  ik:
+    max_iterations: 30
+    position_tolerance_m: 0.001
+    rotation_tolerance_rad: 0.01
+    damping: 0.05
+    max_iteration_step_rad: 0.1
+    max_seed_distance_rad: 0.5
+  # dls: ik.solve_pose (numpy, the RH56F1 default). pink: pink_ik.PinkIk, a QP
+  # per iteration over the palm task and a light posture task toward the seed,
+  # under the profile's position and velocity limits. The tolerances, iteration
+  # budget and jump refusal above apply to both.
+  ik_backend: pink
+  pink:
+    dt: 0.05
+    position_cost: 1.0
+    orientation_cost: 1.0
+    posture_cost: 0.001
+    lm_damping: 1.0e-6
+    solver: daqp
+  arms:
+    right:
+      group: openarm_right_arm
+      control_frame: r_hl_palm   # LEAP palm (r_hj_mount from r_al_7)
+      quest_side: right
+    left:
+      group: openarm_left_arm
+      control_frame: l_hl_palm
+      quest_side: left
+  # Where the bringup serves an arm. Only the fake split bringup exists for LEAP:
+  #   fake   openarm_leap_arms.launch.py (arms under /controller_manager, arm
+  #          joint states on /openarm/joint_states, never waiting for a hand)
+  runtimes:
+    fake:
+      controllers:
+        right: right_joint_trajectory_controller
+        left: left_joint_trajectory_controller
+      joint_states_topic: /openarm/joint_states
+      controller_manager: /controller_manager

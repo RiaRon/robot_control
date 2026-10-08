@@ -1,0 +1,15 @@
+name: leap
+# LEAP Hand: 16 Dynamixel XC330 joints per hand (LEAP_Hand_API motor indices
+# 0..15). Only the fake ros2_control runtime exists so far (leap_hand.launch.py);
+# the real hand is planned as a Dynamixel ros2_control hardware plugin.
+command:
+  interface: position
+  unit: rad
+state:
+  position: rad
+  velocity: rad/s
+  effort: N*m
+safety:
+  watchdog_sec: 0.25
+  error_action: hold_last_safe_pose
+  estop: required
