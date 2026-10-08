@@ -1,6 +1,6 @@
 # Meta Quest 원격조종: OpenArm + LEAP Hand, pink IK (ROS 2 Jazzy, fake)
 
-기존 Quest 팔 원격조종(`docs/quest-teleop.md`, `src/openarm_quest_teleop`)에서 **IK만 pink로 바꿔** OpenArm + LEAP 분리 bringup(`docs/openarm-leap-split-bringup.md`)에 붙였다.
+Quest 팔 원격조종(`docs/quest-teleop.md`, `src/openarm_quest_teleop`)의 IK를 **pink 하나로 바꾸고**(2026-10-08, 이전의 numpy DLS는 삭제), OpenArm + LEAP 분리 bringup(`docs/openarm-leap-split-bringup.md`)에 붙였다. RH56F1 설정도 같은 pink IK를 쓴다.
 
 ```text
 Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy
@@ -20,21 +20,22 @@ Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy
 
 ## 1. 무엇이 바뀌었나
 
-- **`pink_ik.py`:** `PinkIk.solve`는 `ik.solve_pose`와 같은 계약을 따른다.
-  - `IkResult`를 돌려주고, 한계는 반복 안에서 지키며, 예산 안에 못 맞추거나 시드에서 너무 멀면 거부한다.
+- **`pink_ik.py`:** 원격조종의 유일한 IK. `PinkIk.solve`는 `IkResult`(ik.py)를 돌려준다.
+  - 한계는 반복 안에서 지키고, 예산 안에 못 맞추거나 시드에서 너무 멀면 거부한다.
   - 반복마다 pink QP 하나를 푼다: 손바닥 FrameTask + 시드 쪽 약한 PostureTask, profile의 위치·속도 한계, 솔버 daqp.
   - 모델은 실행 중인 description을 이 팔 7축으로 축소한 것이다(다른 팔·손·헤드는 0에 고정).
-- **`teleop.py`:** `ArmTeleop(..., solve=...)`로 IK를 주입받는다. 기본은 기존 DLS라 RH56F1 동작은 그대로다.
-- **`config.py`:** `teleop.ik_backend: dls | pink`와 `teleop.pink` 설정을 받는다. pink가 없으면 설치 방법을 담은 `ConfigError`를 낸다.
+- **`ik.py`:** 설정(`IkSettings`)과 결과(`IkResult`)만 남았다. 이전 DLS(`solve_pose`)는 삭제했고, `ik.damping`과 `ik.max_iteration_step_rad`는 이제 쓰이지 않는다.
+- **`teleop.py`:** `ArmTeleop(..., solve=...)`는 IK를 반드시 받는다. `config.build_teleop`이 pink를 만든다.
+- **`config.py`:** `teleop.pink` 설정으로 PinkIk를 만든다. pink가 없으면 설치 방법을 담은 `ConfigError`를 낸다.
 - **`config/quest_teleop_leap.yaml`:** LEAP 설정.
   - profile `openarm_leap`, 손바닥 `r_hl_palm` / `l_hl_palm`
   - description 토픽 `/openarm_leap/arms/robot_description` (Jazzy controller manager에는 파라미터가 없다)
-  - fake 런타임만 있음, `ik_backend: pink`
+  - fake 런타임만 있음
 - **`src/robot_control/profiles/openarm_leap.yaml` + `components/leap.yaml`:** LEAP 로봇 정의.
   - 46관절이고, 자산 manifest는 urdf 저장소의 `generated/rl/openarm_leap_bi_rl_manifest.yaml`이다.
   - 손 관절의 원래 이름은 LEAP 모터 번호다(`leap_right_0..15`).
 
-DLS와 pink 비교 (같은 LEAP 팔, 100 Hz 10 cm 원 추종):
+pink로 바꾸기 전에 한 비교 (같은 LEAP 팔, 100 Hz 10 cm 원 추종):
 
 | | 실패 | 평균 위치 오차 | 시간 평균 / 최대 |
 |---|---|---|---|
@@ -93,7 +94,7 @@ ros2 topic echo /quest_teleop/right/status
 
 ```bash
 cd kuku_lab/robot_control
-.venv/bin/python -m pytest -q tests/test_quest_teleop_leap_pink.py    # pink 없는 python3에서는 pink 항목 skip
+.venv/bin/python -m pytest -q tests/test_quest_teleop.py tests/test_quest_teleop_leap_pink.py   # pink 없는 python3에서는 teleop 코어 항목 skip
 source /opt/ros/jazzy/setup.bash && source ros_ws/install/setup.bash
 ROS_DOMAIN_ID=176 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST .venv/bin/python tests/jazzy_leap_quest_teleop_probe.py
 ```
@@ -110,4 +111,5 @@ probe는 UDP 15006을 쓴다(실제 앱의 5006과 겹치지 않게). 확인 항
 - 실제 Quest 헤드셋 확인
 - real 런타임 (팔 real launch의 Jazzy 대응, LEAP Dynamixel ros2_control)
 - 손가락 원격조종 (Quest 손 추적 또는 글러브 → LEAP 16관절)
+- Humble 컨테이너 회귀(`tests/run_humble_*.sh`)의 이미지에는 pink가 없어, 그 안의 Quest teleop probe는 pink를 설치하기 전까지 실패한다.
 - `.rosdistro`는 아직 `humble`이다. profile의 `endpoint()`는 humble 항목을 읽지만, LEAP profile은 humble과 jazzy에 같은 값(100 Hz)을 두었다.

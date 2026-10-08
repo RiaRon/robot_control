@@ -32,9 +32,6 @@ FAKE_PLUGIN = "mock_components/GenericSystem"
 #: time at the velocity limit, a streamed command may run ahead of the arm.
 LEAD_SEC = 0.1
 RUNTIMES = ("fake", "real", "fake_integrated")
-#: ``teleop.ik_backend``: dls = ik.solve_pose (numpy, default); pink = pink_ik
-#: (Pinocchio QP, needs the pink venv).
-IK_BACKENDS = ("dls", "pink")
 #: Runtimes that must be driving GenericSystem; anything else there is refused.
 FAKE_RUNTIMES = ("fake", "fake_integrated")
 
@@ -273,12 +270,7 @@ def build_teleop(
 
 
 def _solver(urdf, teleop: dict, binding: ArmBinding, lower, upper, velocity):
-    """The IK the core follows with: None (its default DLS) or pink's solve."""
-    backend = teleop.get("ik_backend", "dls")
-    if backend not in IK_BACKENDS:
-        raise ConfigError(f"ik_backend must be one of {IK_BACKENDS}, got {backend!r}")
-    if backend == "dls":
-        return None
+    """The arm's IK: pink (pink_ik.PinkIk) on the running description."""
     from .pink_ik import PinkIk, PinkSettings
 
     try:
@@ -287,7 +279,7 @@ def _solver(urdf, teleop: dict, binding: ArmBinding, lower, upper, velocity):
                         settings=PinkSettings(**teleop.get("pink", {})))
     except ImportError as error:
         raise ConfigError(
-            f"ik_backend: pink needs pink and pinocchio ({error}); run with the "
+            f"the teleop IK needs pink and pinocchio ({error}); run with the "
             "robot_control/.venv interpreter (docs/quest-teleop-leap-pink.md)") from error
     except ValueError as error:
         raise ConfigError(str(error)) from error

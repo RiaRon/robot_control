@@ -25,7 +25,7 @@ from openarm_quest_teleop.config import (
     load_config,
     load_profile_for,
 )
-from openarm_quest_teleop.ik import IkSettings, solve_pose
+from openarm_quest_teleop.ik import IkSettings
 from openarm_quest_teleop.relative import MappingError, RelativeTargetMapper
 from openarm_quest_teleop.synth import QuestSender, axis_rotation
 from openarm_quest_teleop.teleop import (
@@ -94,6 +94,7 @@ def _teleop(urdf, profile, config, arm="right", **overrides):
     for key, value in overrides.items():
         config["teleop"][key] = value
     binding = bind_arm(urdf, profile, config, arm)
+    pytest.importorskip("pink")  # the teleop IK; robot_control/.venv
     return build_teleop(urdf, profile, config, binding), binding
 
 
@@ -580,12 +581,22 @@ def _arm_limits(profile, binding):
     return (np.array([j.lower for j in joints]), np.array([j.upper for j in joints]))
 
 
-def test_ik_reaches_a_nearby_pose_within_limits(profile, config, urdf):
+def _pink(urdf, profile, config):
+    pytest.importorskip("pink")
+    from openarm_quest_teleop.pink_ik import PinkIk
+
     binding = bind_arm(urdf, profile, config, "right")
-    chain = build_chain(urdf, binding)
     lower, upper = _arm_limits(profile, binding)
+    velocity = np.full(len(lower), 2.0)
+    solver = PinkIk(urdf, binding.runtime_names, binding.control_frame, sign=binding.sign,
+                    lower=lower, upper=upper, velocity=velocity)
+    return solver, build_chain(urdf, binding), lower, upper
+
+
+def test_ik_reaches_a_nearby_pose_within_limits(profile, config, urdf):
+    solver, chain, lower, upper = _pink(urdf, profile, config)
     goal_q = BENT["right"] + np.array([0.05, -0.04, 0.03, 0.06, -0.05, 0.04, 0.02])
-    result = solve_pose(chain, chain.pose(goal_q), BENT["right"], lower, upper)
+    result = solver.solve(chain.pose(goal_q), BENT["right"], lower, upper)
     assert result.ok and result.reason is None
     assert result.position_error_m <= 1e-3 and result.rotation_error_rad <= 1e-2
     assert np.all(result.q >= lower) and np.all(result.q <= upper)
@@ -594,26 +605,23 @@ def test_ik_reaches_a_nearby_pose_within_limits(profile, config, urdf):
 
 
 def test_ik_reports_unreachable_non_finite_and_jumps(profile, config, urdf):
-    binding = bind_arm(urdf, profile, config, "right")
-    chain = build_chain(urdf, binding)
-    lower, upper = _arm_limits(profile, binding)
+    solver, chain, lower, upper = _pink(urdf, profile, config)
     seed = BENT["right"]
 
     far = chain.pose(seed)
     far[:3, 3] += (1.0, 0.0, 0.0)
-    unreachable = solve_pose(chain, far, seed, lower, upper)
+    unreachable = solver.solve(far, seed, lower, upper)
     assert not unreachable.ok and "not reachable" in unreachable.reason
     assert np.all(unreachable.q >= lower) and np.all(unreachable.q <= upper)
 
     broken = chain.pose(seed)
     broken[0, 3] = float("nan")
-    assert solve_pose(chain, broken, seed, lower, upper).reason == "target is not finite"
-    assert solve_pose(chain, chain.pose(seed), seed * float("nan"), lower, upper).reason == (
+    assert solver.solve(broken, seed, lower, upper).reason == "target is not finite"
+    assert solver.solve(chain.pose(seed), seed * float("nan"), lower, upper).reason == (
         "seed is not finite")
 
     elsewhere = chain.pose(seed + np.array([0.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
-    jump = solve_pose(chain, elsewhere, seed, lower, upper,
-                      IkSettings(max_seed_distance_rad=0.2))
+    jump = solver.solve(elsewhere, seed, lower, upper, IkSettings(max_seed_distance_rad=0.2))
     assert not jump.ok and "refusing a jump" in jump.reason
 
 
@@ -641,7 +649,7 @@ def test_enable_starts_at_the_current_pose_and_sends_the_measured_joints(
     result = rig.engage()
     np.testing.assert_array_equal(result.command, BENT["right"])
     np.testing.assert_allclose(result.target, start_palm, atol=1e-12)
-    assert result.position_error_m == 0.0 and result.limited is None
+    assert result.position_error_m <= 1e-12 and result.limited is None  # FK rounding
     for _ in range(20):  # holding the controller still commands no motion
         np.testing.assert_array_equal(rig.step(1.0).command, BENT["right"])
 

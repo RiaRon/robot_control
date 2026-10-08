@@ -1,5 +1,9 @@
 # Quest 3 컨트롤러 → OpenArm 팔 teleoperation 실행 안내
 
+> **2026-10-08: IK가 pink로 바뀌었다.** `ros_teleop`의 IK는 `pink_ik.PinkIk`(Pinocchio QP 미분 IK) 하나이고, 이전의 numpy DLS(`ik.solve_pose`)는 삭제했다.
+> `ros_teleop`은 pink와 pinocchio가 있는 `robot_control/.venv`의 Python으로 실행해야 한다(설치: `docs/quest-teleop-leap-pink.md` 2절).
+> 아래의 `python3 -m openarm_quest_teleop.ros_teleop`은 `.venv/bin/python -m ...`으로 바꿔 읽는다. Humble 컨테이너 이미지에는 pink가 없다.
+
 팔 전용이다. 손(RH56F1) backend, RS485, 손가락 명령은 이 경로에 없다. 손 모델은
 palm frame(`r_hl_palm_sensor`, `l_hl_palm_sensor`)과 장착 geometry 때문에 description에만
 남아 있고, teleop은 손 hardware와 손 controller에 손대지 않는다.

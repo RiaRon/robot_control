@@ -64,6 +64,17 @@ teleop:
     damping: 0.05
     max_iteration_step_rad: 0.1
     max_seed_distance_rad: 0.5
+  # The IK is pink (pink_ik.PinkIk): one QP per iteration over the palm task and
+  # a light posture task toward the seed, under the profile's position and
+  # velocity limits. The tolerances, iteration budget and jump refusal above
+  # apply to it; pink and pinocchio come from robot_control/.venv.
+  pink:
+    dt: 0.05
+    position_cost: 1.0
+    orientation_cost: 1.0
+    posture_cost: 0.001
+    lm_damping: 1.0e-6
+    solver: daqp
   arms:
     right:
       group: rh56f1_right_arm

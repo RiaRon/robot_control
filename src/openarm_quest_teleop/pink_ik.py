@@ -1,9 +1,8 @@
 """Pose IK for one arm with pink: Pinocchio, QP-based differential IK.
 
-The same contract as ``ik.solve_pose`` (an ``IkResult``; joint limits held inside
+The teleop's only IK. It returns an ``IkResult`` (ik.py): joint limits held inside
 the iteration; a target that is not met within the budget, or a solution that
-ends far from its seed, is refused), so ``ArmTeleop`` follows with either. Only
-the solver differs: each iteration is one pink QP over a palm frame task and a
+ends far from its seed, is refused. Each iteration is one pink QP over a palm frame task and a
 light posture task toward the seed, under the configuration and velocity limits,
 solved with daqp. This is the method of OpenArm's own ``openarm_control`` (mink,
 a MuJoCo port of pink), here on the URDF the bringup actually runs.

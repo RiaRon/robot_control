@@ -23,12 +23,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 import math
+from typing import Callable
 
 import numpy as np
 
 from robot_control.kinematics import Chain
 from robot_control.safety import CommandGate, SafetyError
-from .ik import IkSettings, solve_pose
+from .ik import IkResult, IkSettings
 from .relative import MappingError, RelativeTargetMapper
 
 IDLE = "idle"
@@ -143,18 +144,15 @@ class ArmTeleop:
         max_lead: np.ndarray | None = None,
         names: list[str] | None = None,
         settings: TeleopSettings = TeleopSettings(),
-        solve=None,
+        solve: Callable[..., IkResult],
     ):
         self.chain = chain
         self.mapper = mapper
         self.settings = settings
-        #: ``solve(target, seed, lower, upper, ik_settings) -> IkResult``. The
-        #: default iterates the chain's damped least squares (``ik.solve_pose``);
-        #: ``pink_ik.PinkIk.solve`` is the QP alternative. Both hold the limits and
-        #: refuse a jump from the seed, so the rules below do not depend on it.
-        self._solve = solve or (
-            lambda target, seed, lower, upper, ik: solve_pose(
-                self.chain, target, seed, lower, upper, ik))
+        #: ``solve(target, seed, lower, upper, ik_settings) -> IkResult``:
+        #: ``pink_ik.PinkIk.solve`` (built by ``config.build_teleop``). It holds the
+        #: limits and refuses a jump from the seed.
+        self._solve = solve
         self._limits = dict(
             lower=np.asarray(lower, dtype=float),
             upper=np.asarray(upper, dtype=float),

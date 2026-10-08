@@ -1,4 +1,4 @@
-"""Quest teleop on OpenArm + LEAP with the pink IK backend (no ROS).
+"""Quest teleop on OpenArm + LEAP with the pink IK (no ROS).
 
 pink and pinocchio live in robot_control/.venv (docs/quest-teleop-leap-pink.md);
 outside it the pink tests are skipped. The description is the LEAP split
@@ -56,7 +56,7 @@ def _pink(urdf, setup):
 
 def test_leap_config_binds_the_arm_to_the_leap_palm(setup):
     config, profile, binding = setup
-    assert profile.name == "openarm_leap" and config["teleop"]["ik_backend"] == "pink"
+    assert profile.name == "openarm_leap" and "pink" in config["teleop"]
     assert binding.control_frame == "r_hl_palm" and binding.base_frame == "body_root"
     assert binding.naming == "canonical" and binding.is_fake
     assert binding.runtime_names == tuple(f"r_aj_{i}" for i in range(1, 8))
@@ -129,12 +129,14 @@ def test_teleop_core_follows_the_controller_with_pink(urdf, setup):
     assert np.allclose(core.chain.pose(q)[:3, :3], start[:3, :3], atol=1e-2)  # hold mode
 
 
-def test_unknown_ik_backend_is_refused(urdf, setup):
+def test_without_pink_the_teleop_refuses_to_build(urdf, setup, monkeypatch):
     config, profile, binding = setup
-    bad = {**config, "teleop": {**config["teleop"], "ik_backend": "fabric"}}
-    with pytest.raises(ConfigError, match="ik_backend must be one of"):
-        build_teleop(urdf, profile, bad, binding)
+    monkeypatch.setitem(sys.modules, "pinocchio", None)  # import pinocchio -> ImportError
+    with pytest.raises(ConfigError, match="needs pink and pinocchio"):
+        build_teleop(urdf, profile, config, binding)
 
 
-def test_the_rh56f1_config_keeps_the_dls_default():
-    assert load_config(DEFAULT_CONFIG)["teleop"].get("ik_backend", "dls") == "dls"
+def test_both_teleop_configs_carry_pink_settings():
+    for path in (DEFAULT_CONFIG, LEAP_CONFIG):
+        teleop = load_config(path)["teleop"]
+        assert "ik_backend" not in teleop and teleop["pink"]["solver"] == "daqp"
