@@ -143,10 +143,18 @@ class ArmTeleop:
         max_lead: np.ndarray | None = None,
         names: list[str] | None = None,
         settings: TeleopSettings = TeleopSettings(),
+        solve=None,
     ):
         self.chain = chain
         self.mapper = mapper
         self.settings = settings
+        #: ``solve(target, seed, lower, upper, ik_settings) -> IkResult``. The
+        #: default iterates the chain's damped least squares (``ik.solve_pose``);
+        #: ``pink_ik.PinkIk.solve`` is the QP alternative. Both hold the limits and
+        #: refuse a jump from the seed, so the rules below do not depend on it.
+        self._solve = solve or (
+            lambda target, seed, lower, upper, ik: solve_pose(
+                self.chain, target, seed, lower, upper, ik))
         self._limits = dict(
             lower=np.asarray(lower, dtype=float),
             upper=np.asarray(upper, dtype=float),
@@ -302,10 +310,8 @@ class ArmTeleop:
     def _follow(self, pose, q, ages) -> StepResult:
         target, clamped = self.mapper.target(pose)
         limits = self._limits
-        solved = solve_pose(
-            self.chain, target, self._solution, limits["lower"], limits["upper"],
-            self.settings.ik,
-        )
+        solved = self._solve(
+            target, self._solution, limits["lower"], limits["upper"], self.settings.ik)
         if not solved.ok:
             # Still engaged: the hand may come back into reach. Nothing is sent
             # and the previous solution is kept as the seed.

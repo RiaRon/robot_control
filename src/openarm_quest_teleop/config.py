@@ -32,6 +32,9 @@ FAKE_PLUGIN = "mock_components/GenericSystem"
 #: time at the velocity limit, a streamed command may run ahead of the arm.
 LEAD_SEC = 0.1
 RUNTIMES = ("fake", "real", "fake_integrated")
+#: ``teleop.ik_backend``: dls = ik.solve_pose (numpy, default); pink = pink_ik
+#: (Pinocchio QP, needs the pink venv).
+IK_BACKENDS = ("dls", "pink")
 #: Runtimes that must be driving GenericSystem; anything else there is refused.
 FAKE_RUNTIMES = ("fake", "fake_integrated")
 
@@ -116,7 +119,7 @@ def bind_arm(urdf: str, profile: RobotProfile, config: dict, arm: str) -> ArmBin
     control_frame = entry["control_frame"]
     if control_frame not in {link.get("name") for link in root.findall("link")}:
         raise ConfigError(
-            f"the running description has no link {control_frame!r}; the RH56F1 "
+            f"the running description has no link {control_frame!r}; the hand "
             "geometry must stay in the description for its palm frame"
         )
 
@@ -253,17 +256,42 @@ def build_teleop(
         min_enable_singular_value=float(teleop.get("min_enable_singular_value", 0.0)),
         ik=IkSettings(**teleop.get("ik", {})),
     )
+    lower = np.array([joint.lower for joint in joints])
+    upper = np.array([joint.upper for joint in joints])
     return ArmTeleop(
         chain,
         mapper,
-        lower=np.array([joint.lower for joint in joints]),
-        upper=np.array([joint.upper for joint in joints]),
+        lower=lower,
+        upper=upper,
         velocity=velocity,
         command_period_sec=1.0 / profile.endpoint().command_rate_hz,
         max_lead=velocity * LEAD_SEC,
         names=list(binding.canonical_names),
         settings=settings,
+        solve=_solver(urdf, teleop, binding, lower, upper, velocity),
     )
+
+
+def _solver(urdf, teleop: dict, binding: ArmBinding, lower, upper, velocity):
+    """The IK the core follows with: None (its default DLS) or pink's solve."""
+    backend = teleop.get("ik_backend", "dls")
+    if backend not in IK_BACKENDS:
+        raise ConfigError(f"ik_backend must be one of {IK_BACKENDS}, got {backend!r}")
+    if backend == "dls":
+        return None
+    from .pink_ik import PinkIk, PinkSettings
+
+    try:
+        solver = PinkIk(urdf, binding.runtime_names, binding.control_frame,
+                        sign=binding.sign, lower=lower, upper=upper, velocity=velocity,
+                        settings=PinkSettings(**teleop.get("pink", {})))
+    except ImportError as error:
+        raise ConfigError(
+            f"ik_backend: pink needs pink and pinocchio ({error}); run with the "
+            "robot_control/.venv interpreter (docs/quest-teleop-leap-pink.md)") from error
+    except ValueError as error:
+        raise ConfigError(str(error)) from error
+    return solver.solve
 
 
 def load_profile_for(config: dict) -> RobotProfile:
