@@ -7,7 +7,7 @@
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
 // STATUS: not implemented; Stage 5B-2 gate FAILED. See
-// robot_control/docs/rh56f1-protocol-evidence.md for the blockers.
+// robot_control/docs/rh56f1/rh56f1-protocol-evidence.md for the blockers.
 // connect() always fails, so selecting
 // transport=rs485 refuses to run rather than silently doing something
 // unverified — the mock transport and everything above this file (AssetSpec,
@@ -26,7 +26,7 @@ Rs485Transport::Rs485Transport(std::string port, int baudrate, int device_id)
 bool Rs485Transport::connect() {
   // Deliberately refuses: per-hand IDs, raw<->URDF conversion, a single
   // official raw range, rates, timeout and power-on/comm-loss behavior are not
-  // established (docs/rh56f1-protocol-evidence.md, gate 5B-2 items 7-14).
+  // established (docs/rh56f1/rh56f1-protocol-evidence.md, gate 5B-2 items 7-14).
   // Do not open the port until they are.
   last_error_ = TransportError::kNotImplemented;
   connected_ = false;

@@ -655,7 +655,7 @@ def _rh56f1_smoke_test(args: argparse.Namespace) -> int:
     joint offset by --delta" instead of taking an absolute target from
     --values/--named, and a small built-in delta/velocity ceiling on top of
     the profile's own joint limits. See
-    OPENARM_RH56F1_INTEGRATION_STATUS.md Stage 4 and docs/rh56f1-real-bringup.md.
+    OPENARM_RH56F1_INTEGRATION_STATUS.md Stage 4 and docs/rh56f1/rh56f1-real-bringup.md.
     """
     from .ros_adapter import RosAdapter
 

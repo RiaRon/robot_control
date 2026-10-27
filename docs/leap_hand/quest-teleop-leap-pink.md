@@ -1,6 +1,6 @@
 # Meta Quest 원격조종: OpenArm + LEAP Hand, pink IK (ROS 2 Jazzy, fake)
 
-Quest 팔 원격조종(`docs/quest-teleop.md`, `src/openarm_quest_teleop`)의 IK를 **pink 하나로 바꾸고**(2026-10-08, 이전의 numpy DLS는 삭제), OpenArm + LEAP 분리 bringup(`docs/openarm-leap-split-bringup.md`)에 붙였다. RH56F1 설정도 같은 pink IK를 쓴다.
+Quest 팔 원격조종(`docs/rh56f1/quest-teleop.md`, `src/openarm_quest_teleop`)의 IK를 **pink 하나로 바꾸고**(2026-10-08, 이전의 numpy DLS는 삭제), OpenArm + LEAP 분리 bringup(`docs/leap_hand/openarm-leap-split-bringup.md`)에 붙였다. RH56F1 설정도 같은 pink IK를 쓴다.
 
 ```text
 Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy

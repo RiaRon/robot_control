@@ -3,7 +3,7 @@
 SenseGlove Nova2 글러브 입력으로 분리 bringup의 손별 fake trajectory controller를
 움직인다. Quest 팔 추종과 동시에 RViz에서 확인할 수 있다. 팔 CM, 오른손 CM, 왼손 CM은 서로
 독립이고, 통합 모델(RSP 하나, merger 하나)은 바뀌지 않았다. 분리 bringup 자체는
-`docs/openarm-rh56f1-split-bringup.md`, Quest는 `docs/quest-teleop.md`를 본다.
+`docs/rh56f1/openarm-rh56f1-split-bringup.md`, Quest는 `docs/rh56f1/quest-teleop.md`를 본다.
 
 검증 상태 (2026-10-04):
 
@@ -222,7 +222,7 @@ RViz에서 오른손 네 손가락이 wave로 쥐었다 편다. 엄지는 `hold`
 
 ### 5.2 순서 2: Quest 팔과 함께
 
-`docs/openarm-rh56f1-split-bringup.md` 4.4절과 같다. 글러브 입력과 Quest는 서로 다른 CM,
+`docs/rh56f1/openarm-rh56f1-split-bringup.md` 4.4절과 같다. 글러브 입력과 Quest는 서로 다른 CM,
 다른 명령 토픽을 쓴다.
 
 ```bash
@@ -326,7 +326,7 @@ adapter는 바꿀 필요가 없다.
 ## 8. 실제 손 backend가 갖춰야 할 것 (미구현)
 
 이 adapter는 **fake 손에만** 명령한다(GenericSystem이 아니면 거부). 실제 손을 손 CM에
-붙이려면 `docs/openarm-rh56f1-split-bringup.md` 7절의 backend가 필요하다. 원본 브리지를
+붙이려면 `docs/rh56f1/openarm-rh56f1-split-bringup.md` 7절의 backend가 필요하다. 원본 브리지를
 그대로 쓰면 안 되는 이유와 backend 요구사항은 다음과 같다.
 
 | 요구 | 원본 브리지 | 필요한 것 |

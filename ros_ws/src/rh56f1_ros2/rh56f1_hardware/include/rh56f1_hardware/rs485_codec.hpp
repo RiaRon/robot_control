@@ -12,7 +12,7 @@
 // byte encode/decode: it never opens a port and is not linked into the
 // ros2_control plugin. Frame layout, command codes and checksum: RH56F1 user
 // manual section 2.2, tables 4-12 (identical in the CN V1.0.1 and EN V1.2
-// files); see robot_control/docs/rh56f1-protocol-evidence.md.
+// files); see robot_control/docs/rh56f1/rh56f1-protocol-evidence.md.
 //
 //   request : EB 90 | ID | LEN | CMD | ADDR_L ADDR_H | DATA... | CS
 //   response: 90 EB | ID | LEN | CMD | ADDR_L ADDR_H | DATA... | CS

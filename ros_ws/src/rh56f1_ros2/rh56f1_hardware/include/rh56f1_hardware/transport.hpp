@@ -23,7 +23,7 @@ namespace rh56f1_hardware {
 // RH56F1 register order (manual tables 35/40) is little, ring, middle, index,
 // thumb bend, thumb rotation; a real transport must remap by name, and which
 // of thumb1/thumb2 is the vendor's bend vs rotation actuator is not yet
-// confirmed (docs/rh56f1-protocol-evidence.md).
+// confirmed (docs/rh56f1/rh56f1-protocol-evidence.md).
 inline constexpr std::size_t kActuatorCount = 6;
 
 enum class TransportError {

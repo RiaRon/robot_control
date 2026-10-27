@@ -100,7 +100,7 @@ def _setup(context: LaunchContext):
             raise RuntimeError(
                 "runtime:=real brings up the real OpenArm arms: pass "
                 "i_understand_this_moves_real_hardware:=true after reading "
-                "docs/openarm-rh56f1-split-bringup.md and docs/rh56f1-real-bringup.md")
+                "docs/rh56f1/openarm-rh56f1-split-bringup.md and docs/rh56f1/rh56f1-real-bringup.md")
     if _bool(context, "check_ownership"):
         require_no_controller_manager(ARM_NAMESPACE)
     remappings = [("/joint_states", ARM_STATE_TOPIC),

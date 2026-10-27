@@ -43,7 +43,7 @@ pluginlib_export_plugin_description_file(hardware_interface rh56f1_hardware.xml)
 # Stage 5B-2a/b: RS-485 codec, serial I/O and register client, plus the
 # read-only rh56f1_diag tool. Deliberately NOT linked into the ros2_control
 # plugin above: the plugin's Rs485Transport stays a fail-closed stub until the
-# real-transport gate passes (docs/rh56f1-protocol-evidence.md).
+# real-transport gate passes (docs/rh56f1/rh56f1-protocol-evidence.md).
 set(RS485_SOURCES
   src/protocol.cpp
   src/rs485_codec.cpp

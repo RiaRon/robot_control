@@ -19,7 +19,7 @@ OpenArm-Tesollo bringup(`KUKU-Robot-Lab/robot_control` humble @ `a8328a1`)을 �
 | Quest 합성 입력 → 분리된 fake 팔 추종 | 자동 회귀로 검증 |
 | 실제 Quest 입력 → 분리된 fake 오른팔, RViz | **사용자가 확인** (2026-10-03). 위치 추종과 `--orientation-mode relative` 회전이 정상 동작 |
 | real 팔 launch 구조(손 hardware 없음, inactive 시작) | 정적 검사와 GenericSystem 대역으로만 검증 |
-| 합성 Nova2 글러브 → 손별 fake 손 (Quest 팔과 함께) | 자동 회귀로 검증 (2026-10-04, `docs/rh56f1-glove-fake.md`) |
+| 합성 Nova2 글러브 → 손별 fake 손 (Quest 팔과 함께) | 자동 회귀로 검증 (2026-10-04, `docs/rh56f1/rh56f1-glove-fake.md`) |
 | 실제 OpenArm 운동, 실제 손 | **미검증. 실행한 적 없음** |
 
 ## 1. 구조
@@ -41,7 +41,7 @@ OpenArm-Tesollo bringup(`KUKU-Robot-Lab/robot_control` humble @ `a8328a1`)을 �
   `fake_trajectory_controller_prime.py`를 한 번 실행한다. 측정 위치를 그대로 담은 hold goal을
   보내 끝날 때까지 기다린다(움직임 0). joint_trajectory_controller 2.47.0이 action goal을 한
   번도 끝내지 않은 상태에서는 토픽 명령을 로그 없이 버릴 수 있기 때문이다
-  (`docs/rh56f1-glove-fake.md` 9절). 로그에 `topic commands are accepted`가 나오기 전에 보낸
+  (`docs/rh56f1/rh56f1-glove-fake.md` 9절). 로그에 `topic commands are accepted`가 나오기 전에 보낸
   action goal은 이 hold goal에 선점될 수 있다. real 팔 launch에는 없다.
 - real 손 launch는 없다. `rh56f1_hand.launch.py runtime:=real`은 거부된다(6절).
 - 관절 이름은 이렇게 정했다.
@@ -170,7 +170,7 @@ ros2 action send_goal /rh56f1_right/right_hand_trajectory_controller/follow_join
 
 ### 4.4 Quest bridge와 teleop
 
-`docs/quest-teleop.md`와 같다. 기본 `--runtime fake`는 분리된 팔을 쓴다. 상태는
+`docs/rh56f1/quest-teleop.md`와 같다. 기본 `--runtime fake`는 분리된 팔을 쓴다. 상태는
 `/openarm/joint_states`에서 읽고, description은 `/controller_manager`의
 `robot_description` 파라미터에서 읽는다. 손 상태가 없어도 teleop은 동작한다.
 
@@ -191,7 +191,7 @@ python3 -m openarm_quest_teleop.ros_teleop --arm left  --runtime fake --execute 
 
 ### 4.4a Nova2 글러브 → fake 손
 
-손별 글러브 입력(원본 retarget 노드 + adapter)은 `docs/rh56f1-glove-fake.md`를 본다.
+손별 글러브 입력(원본 retarget 노드 + adapter)은 `docs/rh56f1/rh56f1-glove-fake.md`를 본다.
 
 ```bash
 ros2 launch openarm_bringup rh56f1_glove_input.launch.py side:=right glove_serial:=SYNTH execute:=true
@@ -232,7 +232,7 @@ backend가 없다.
 
 ## 6. real 팔 (사용자가 직접, 미검증)
 
-실행 전 `docs/rh56f1-real-bringup.md`의 preflight(E-stop, 받침, CAN 확인, 현재 자세 기록)를
+실행 전 `docs/rh56f1/rh56f1-real-bringup.md`의 preflight(E-stop, 받침, CAN 확인, 현재 자세 기록)를
 마친다. 기존 통합 real bringup은 띄우지 않는다. 띄워져 있으면 CAN 잠금 때문에 이 launch가
 거부된다.
 

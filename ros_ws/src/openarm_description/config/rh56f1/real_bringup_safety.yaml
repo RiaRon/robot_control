@@ -29,7 +29,7 @@ hand:
   # UNVERIFIED placeholders, NOT RH56F1 values: 10 Hz device writes, 50 Hz
   # state polls, 0.25 s staleness (components/rh56f1.yaml safety.watchdog_sec).
   # Stage 5A found no command/poll period, timeout or watchdog in the official
-  # manual (docs/rh56f1-protocol-evidence.md); max_velocity_rad_s/max_step_rad
+  # manual (docs/rh56f1/rh56f1-protocol-evidence.md); max_velocity_rad_s/max_step_rad
   # above are Tesollo-derived placeholders too. Real hands stay NO-GO.
   min_write_period_sec: 0.1
   state_poll_period_sec: 0.02

@@ -1,6 +1,6 @@
 # OpenArm + LEAP Hand 팔·손 분리 bringup (fake, ROS 2 Jazzy)
 
-OpenArm + RH56F1 분리 bringup(`docs/openarm-rh56f1-split-bringup.md`)과 같은 구조로 LEAP 손을 붙였다.
+OpenArm + RH56F1 분리 bringup(`docs/rh56f1/openarm-rh56f1-split-bringup.md`)과 같은 구조로 LEAP 손을 붙였다.
 팔과 손이 실행 프로세스, controller manager(CM), 하드웨어를 따로 가진다. 지금은 **fake만** 있다.
 
 검증 상태 (2026-10-07):

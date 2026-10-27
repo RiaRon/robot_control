@@ -79,7 +79,7 @@ class Process:
 
 def main() -> int:
     if not VENV_PYTHON.is_file():
-        print(f"pink venv missing: {VENV_PYTHON} (docs/quest-teleop-leap-pink.md)")
+        print(f"pink venv missing: {VENV_PYTHON} (docs/leap_hand/quest-teleop-leap-pink.md)")
         return 1
     os.environ["OPENARM_RH56F1_LOCK_DIR"] = tempfile.mkdtemp(prefix="leap_quest_locks_")
     py = str(VENV_PYTHON)

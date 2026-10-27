@@ -1,14 +1,14 @@
 # Quest 3 컨트롤러 → OpenArm 팔 teleoperation 실행 안내
 
 > **2026-10-08: IK가 pink로 바뀌었다.** `ros_teleop`의 IK는 `pink_ik.PinkIk`(Pinocchio QP 미분 IK) 하나이고, 이전의 numpy DLS(`ik.solve_pose`)는 삭제했다.
-> `ros_teleop`은 pink와 pinocchio가 있는 `robot_control/.venv`의 Python으로 실행해야 한다(설치: `docs/quest-teleop-leap-pink.md` 2절).
+> `ros_teleop`은 pink와 pinocchio가 있는 `robot_control/.venv`의 Python으로 실행해야 한다(설치: `docs/leap_hand/quest-teleop-leap-pink.md` 2절).
 > 아래의 `python3 -m openarm_quest_teleop.ros_teleop`은 `.venv/bin/python -m ...`으로 바꿔 읽는다. Humble 컨테이너 이미지에는 pink가 없다.
 
 팔 전용이다. 손(RH56F1) backend, RS485, 손가락 명령은 이 경로에 없다. 손 모델은
 palm frame(`r_hl_palm_sensor`, `l_hl_palm_sensor`)과 장착 geometry 때문에 description에만
 남아 있고, teleop은 손 hardware와 손 controller에 손대지 않는다.
 
-2026-10-03부터 기본 bringup은 팔·손 분리 구조다(`docs/openarm-rh56f1-split-bringup.md`).
+2026-10-03부터 기본 bringup은 팔·손 분리 구조다(`docs/rh56f1/openarm-rh56f1-split-bringup.md`).
 팔은 `/controller_manager`, 손은 손마다 자기 CM을 쓴다. teleop의 `--runtime fake`/`real`은
 분리된 팔 CM과 `/openarm/joint_states`를 쓰고, 손 상태가 없어도 동작한다. 이전 단일 CM
 fake bringup에는 `--runtime fake_integrated`를 쓴다.
@@ -209,9 +209,9 @@ tests/run_humble_split_bringup.sh           # 분리 구조 + Quest + glove + re
 
 **여기부터는 사용자가 직접 실행한다.** 아래 절차는 실물에서 실행된 적이 없다. real
 bringup 자체의 preflight, launch, read-only 확인, 정지 방법은
-`docs/rh56f1-real-bringup.md`를 그대로 따른다. E-stop을 손이 닿는 곳에 둔다.
+`docs/rh56f1/rh56f1-real-bringup.md`를 그대로 따른다. E-stop을 손이 닿는 곳에 둔다.
 
-1. `docs/rh56f1-real-bringup.md`의 preflight를 마친다.
+1. `docs/rh56f1/rh56f1-real-bringup.md`의 preflight를 마친다.
 2. 분리 bringup의 real 팔을 띄운다. 손 geometry와 palm frame은 모델에 있고, 손
    hardware는 로드하지 않는다. 기존 통합 real launch는 함께 띄우지 않는다(같은 CAN을 잡으면
    거부된다):
@@ -232,7 +232,7 @@ bringup 자체의 preflight, launch, read-only 확인, 정지 방법은
    - 또는 activate 후 기존 도구로 올린다 (이 profile로는 실행해 보지 않았다. `--execute`
      없이 먼저 출력만 확인한다):
      `robotctl pose ready --profile openarm_rh56f1 --group rh56f1_right_arm`
-5. 오른팔만 켠다 (`docs/rh56f1-real-bringup.md` Step 3와 같다):
+5. 오른팔만 켠다 (`docs/rh56f1/rh56f1-real-bringup.md` Step 3와 같다):
    ```bash
    ros2 control set_hardware_component_state -c /controller_manager openarm_rh56f1_right_arm active
    ros2 control switch_controllers -c /controller_manager --activate rh56f1_right_arm_controller
@@ -279,7 +279,7 @@ python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime real \
 | 물리 E-stop / 전원 차단 | 모든 것이 멈춤. **소프트웨어에 의존하지 않는 유일한 정지** |
 
 팔 component를 `inactive`로 내리면 토크가 꺼져 팔이 떨어진다. 받칠 사람이나 거치대가
-있어야 한다. 나머지 종료 절차와 주의는 `docs/rh56f1-real-bringup.md`의 *Stopping*을 따른다.
+있어야 한다. 나머지 종료 절차와 주의는 `docs/rh56f1/rh56f1-real-bringup.md`의 *Stopping*을 따른다.
 teleop은 종료할 때 팔을 home/zero로 보내지 않는다.
 
 ## 설정 요약

@@ -22,7 +22,7 @@ namespace rh56f1_hardware {
 // into this plugin: rs485_codec.hpp (frames), serial_port.hpp (one owner per
 // port, 8N1, timeouts) and register_client.hpp (validated request/reply,
 // writes disabled by default).
-// The real-transport gate (5B-2 in docs/rh56f1-protocol-evidence.md) still
+// The real-transport gate (5B-2 in docs/rh56f1/rh56f1-protocol-evidence.md) still
 // FAILS: per-hand bus IDs, the vendor-angle to URDF-joint conversion, a single
 // official raw range, command/poll rate, reply timeout, and power-on /
 // comm-loss behavior are not established. The vendor SDK in

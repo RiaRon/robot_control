@@ -12,7 +12,7 @@ other joint (the other arm, the hand, the head) is locked at zero, which does no
 move the palm frame. Limits are the profile's, written into the reduced model.
 
 pink and pinocchio are not in the ROS distribution: install them into a venv
-that also sees the system ROS packages (docs/quest-teleop-leap-pink.md).
+that also sees the system ROS packages (docs/leap_hand/quest-teleop-leap-pink.md).
 """
 
 from __future__ import annotations

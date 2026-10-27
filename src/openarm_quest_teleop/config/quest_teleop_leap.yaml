@@ -2,7 +2,7 @@
 # IK solved by pink (Pinocchio QP differential IK). Same keys as quest_teleop.yaml;
 # only the teleop block differs. Pass it with --config to ros_bridge, ros_teleop,
 # monitor and synth, and run ros_teleop with robot_control/.venv/bin/python
-# (docs/quest-teleop-leap-pink.md).
+# (docs/leap_hand/quest-teleop-leap-pink.md).
 
 quest:
   udp:

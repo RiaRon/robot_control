@@ -8,7 +8,7 @@
 
 """Real-hardware bimanual OpenArm + RH56F1 bringup.
 
-Read docs/rh56f1-real-bringup.md before running this against hardware.
+Read docs/rh56f1/rh56f1-real-bringup.md before running this against hardware.
 
 What launching does (controller_manager hardware_components_initial_state):
   - Arm components start configured but INACTIVE: state is read, no motor is
@@ -88,7 +88,7 @@ def _setup(context: LaunchContext):
         raise RuntimeError(
             "openarm.rh56f1_bimanual_real.launch.py refuses to start: "
             "i_understand_this_moves_real_hardware must be 'true' (it has no default). "
-            "Read docs/rh56f1-real-bringup.md first."
+            "Read docs/rh56f1/rh56f1-real-bringup.md first."
         )
     canonical_urdf = Path(_text(context, "canonical_urdf"))
     manifest_text = _text(context, "manifest")

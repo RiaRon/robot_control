@@ -10,7 +10,7 @@
 # the four independent ros2_control hardware components in
 # openarm_rh56f1.bimanual.real.ros2_control.xacro. None of them is spawned
 # active by openarm.rh56f1_bimanual_real.launch.py — see that launch file and
-# docs/rh56f1-real-bringup.md for the explicit, manual activation procedure.
+# docs/rh56f1/rh56f1-real-bringup.md for the explicit, manual activation procedure.
 # Controller names equal the openarm_rh56f1 profile's group controllers, and
 # joint names are the runtime description's source names
 # (tests/test_openarm_rh56f1_real_control_description.py checks both). The

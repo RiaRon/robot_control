@@ -1,6 +1,6 @@
 """Quest teleop on OpenArm + LEAP with the pink IK (no ROS).
 
-pink and pinocchio live in robot_control/.venv (docs/quest-teleop-leap-pink.md);
+pink and pinocchio live in robot_control/.venv (docs/leap_hand/quest-teleop-leap-pink.md);
 outside it the pink tests are skipped. The description is the LEAP split
 bringup's fake arm description, built from the canonical urdf asset.
 """
@@ -27,7 +27,7 @@ from openarm_quest_teleop.teleop import ENGAGED, ControllerSample, JointSample  
 LEAP_CONFIG = DEFAULT_CONFIG.with_name("quest_teleop_leap.yaml")
 CANONICAL = leap.default_canonical_urdf(str(LAUNCH_DIR / "openarm_leap_arms.launch.py"))
 pytestmark = pytest.mark.skipif(not CANONICAL, reason="openarm_leap_bi_rl.urdf not found")
-BENT = np.array([0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0])  # the fake start pose of docs/quest-teleop.md
+BENT = np.array([0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0])  # the fake start pose of docs/rh56f1/quest-teleop.md
 
 
 @pytest.fixture(scope="module")

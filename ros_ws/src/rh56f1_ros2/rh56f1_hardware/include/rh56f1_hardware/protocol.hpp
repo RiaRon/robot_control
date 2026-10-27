@@ -13,7 +13,7 @@
 // Inspire "RH56F1 series user manual", CN PRJ-02-TS-U-001 (V1.0.1 content) and
 // EN PRJ-02-TS-U-015 ("RH56F1-User-ManualV1.2.pdf", 2026-09), section 2.5,
 // tables 30-47; both editions agree on everything in this file. See
-// robot_control/docs/rh56f1-protocol-evidence.md.
+// robot_control/docs/rh56f1/rh56f1-protocol-evidence.md.
 //
 // Deliberately NOT here: raw angle ranges (the two manual editions and the
 // vendor host-software screenshots disagree), any raw<->radian conversion, and

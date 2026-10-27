@@ -2,7 +2,7 @@
 
 `openarm_rh56f1_*`, `rh56f1_*` bringup, `openarm_quest_teleop`, 관련 테스트를 다른 PC에서
 그대로 돌리기 위한 준비 절차다. 실물 로봇은 다루지 않는다. 실물 절차는
-`docs/openarm-rh56f1-split-bringup.md` 6절과 `docs/rh56f1-real-bringup.md`에 있다.
+`docs/rh56f1/openarm-rh56f1-split-bringup.md` 6절과 `docs/rh56f1/rh56f1-real-bringup.md`에 있다.
 
 ## 1. 필요한 저장소와 commit
 
@@ -95,7 +95,7 @@ ros2 launch openarm_bringup openarm_rh56f1_arms.launch.py runtime:=fake use_rviz
 # 터미널 C, D (선택): 손별 fake CM
 ros2 launch openarm_bringup rh56f1_right_hand.launch.py
 ros2 launch openarm_bringup rh56f1_left_hand.launch.py
-# 글러브(합성 또는 실제) → fake 손: docs/rh56f1-glove-fake.md
+# 글러브(합성 또는 실제) → fake 손: docs/rh56f1/rh56f1-glove-fake.md
 ```
 
 컨테이너는 스크립트 위치에서 `kuku_lab`을 찾아 `/workspace/kuku_lab`에 마운트하고
@@ -105,7 +105,7 @@ ros2 launch openarm_bringup rh56f1_left_hand.launch.py
 
 ## 6. Quest 추종 (fake)
 
-`docs/quest-teleop.md` 1–3절대로 Quest 앱을 설치하고 PC IP와 port 5006을 입력한다. 그다음
+`docs/rh56f1/quest-teleop.md` 1–3절대로 Quest 앱을 설치하고 PC IP와 port 5006을 입력한다. 그다음
 같은 컨테이너에서 실행한다.
 
 ```bash

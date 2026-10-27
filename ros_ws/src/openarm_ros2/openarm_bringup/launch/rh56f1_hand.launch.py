@@ -26,7 +26,7 @@ runtime:=fake  mock_components/GenericSystem, canonical joint names,
                its measured position (fake_trajectory_controller_prime.py) so
                it accepts topic commands.
 runtime:=real  refused: there is no hand backend in this bringup yet. See
-               docs/openarm-rh56f1-split-bringup.md for what a backend must
+               docs/rh56f1/openarm-rh56f1-split-bringup.md for what a backend must
                provide to be connected here.
 """
 
@@ -74,7 +74,7 @@ def _setup(context: LaunchContext):
         raise RuntimeError(
             "rh56f1_hand.launch.py has no real hand backend yet; only runtime:=fake "
             "exists. The contract a backend must meet is in "
-            "docs/openarm-rh56f1-split-bringup.md.")
+            "docs/rh56f1/openarm-rh56f1-split-bringup.md.")
     namespace = HAND_NAMESPACE[side]
     manager = controller_manager(namespace)
     if text("check_ownership").lower() == "true":

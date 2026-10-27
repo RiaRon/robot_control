@@ -191,7 +191,7 @@ def execution_refusal(
         return (
             f"the arm is driven by {list(binding.plugins)}: this is real hardware. "
             "--execute alone is refused; add --confirm-real-hardware once the "
-            "checks in docs/quest-teleop.md are done"
+            "checks in docs/rh56f1/quest-teleop.md are done"
         )
     return None
 
@@ -280,7 +280,7 @@ def _solver(urdf, teleop: dict, binding: ArmBinding, lower, upper, velocity):
     except ImportError as error:
         raise ConfigError(
             f"the teleop IK needs pink and pinocchio ({error}); run with the "
-            "robot_control/.venv interpreter (docs/quest-teleop-leap-pink.md)") from error
+            "robot_control/.venv interpreter (docs/leap_hand/quest-teleop-leap-pink.md)") from error
     except ValueError as error:
         raise ConfigError(str(error)) from error
     return solver.solve
