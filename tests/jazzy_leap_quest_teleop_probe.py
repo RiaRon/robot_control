@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Jazzy runtime probe: synthetic Quest -> pink IK teleop -> fake OpenArm + LEAP arms.
+"""Jazzy runtime probe: synthetic headset page -> quest_view -> pink IK teleop and neck -> fake OpenArm + LEAP.
 
     openarm_leap_arms.launch.py                     fake arms + model (Jazzy)
-    openarm_quest_teleop.ros_bridge  (UDP :15006)    Quest packets -> /quest/* topics
+    openarm_quest_view.server --test-pattern        the headset page's server (page :18787, poses TCP :16543)
+    openarm_quest_teleop.ros_bridge                 quest_view TCP -> /quest/* topics (incl. /quest/hmd/pose)
     openarm_quest_teleop.ros_teleop  --execute      quest_teleop_leap.yaml: palm r_hl_palm, pink IK,
                                                     first moves the arm to rh56f1_aglt_home
-    openarm_quest_teleop.synth --scenario axes      grip, 5 cm forward/back, left/back, up/back, release
+    openarm_head.ros_head  (fake neck)              /quest/hmd/pose -> pan/tilt -> /openarm_leap/head/joint_states
+    openarm_quest_teleop.synth --set-front          plays the page: robot front, then
+                       --scenario axes              grip, 5 cm forward/back, left/back, up/back, release
+                       --scenario head              headset 20 deg left and back, 10 deg up and back
 
 Run from robot_control with ROS 2 Jazzy and ros_ws/install sourced, the pink venv
 present, on an otherwise unused ROS_DOMAIN_ID:
@@ -39,9 +43,11 @@ from std_msgs.msg import String
 import tf2_ros
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "src/openarm_quest_teleop/config/quest_teleop_leap.yaml"
+CONFIG = ROOT / "src/openarm_quest_teleop/config/leap_hand/quest_teleop_leap.yaml"
 VENV_PYTHON = ROOT / ".venv/bin/python"
-PORT = "15006"
+PAGE_PORT, POSE_PORT = "18787", "16543"  # not the real 8787 / 65432
+QUEST_VIEW_PORTS = ["--port", PAGE_PORT, "--tcp-port", POSE_PORT, "--sync-port", "14200",
+                    "--frame-port", "17126", "--head-status-port", "17121"]
 #: rh56f1_aglt_home, right arm (poses/openarm_leap.yaml = sim2real rh56f1_aglt.yaml)
 HOME = np.array([-1.2127, 0.2026, 0.6538, 1.7608, 0.3791, 0.5785, 0.6646])
 FAILED: list[str] = []
@@ -138,8 +144,12 @@ def main() -> int:
         right = [f"r_aj_{i}" for i in range(1, 8)]
         check("arm_starts_at_zero", np.allclose([joints[n] for n in right], 0.0, atol=1e-3))
 
+        processes.append(Process("quest_view", [py, "-m", "openarm_quest_view.server", "--test-pattern",
+                                                *QUEST_VIEW_PORTS]))
         processes.append(Process("bridge", [py, "-m", "openarm_quest_teleop.ros_bridge",
-                                            "--config", str(CONFIG), "--port", PORT]))
+                                            "--config", str(CONFIG), "--port", POSE_PORT]))
+        processes.append(Process("head", [py, "-m", "openarm_head.ros_head", "--config", str(CONFIG),
+                                          "--no-log", "--udp-target", "127.0.0.1:17121"]))
         processes.append(Process("teleop", [py, "-m", "openarm_quest_teleop.ros_teleop",
                                             "--config", str(CONFIG), "--arm", "right",
                                             "--runtime", "fake", "--execute"]))
@@ -163,7 +173,7 @@ def main() -> int:
 
         history.clear()
         synth = subprocess.Popen([py, "-m", "openarm_quest_teleop.synth", "--config", str(CONFIG),
-                                  "--port", PORT, "--scenario", "axes"],
+                                  "--port", PAGE_PORT, "--scenario", "axes", "--set-front"],
                                  env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, cwd=ROOT,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         samples = []  # (palm displacement from start) while the synth runs
@@ -196,6 +206,31 @@ def main() -> int:
         check("released_to_idle", status.get("state") == "idle", str(status.get("state")))
         left = palm("l_hl_palm")
         check("left_arm_untouched", left is not None and np.linalg.norm(left - left_start) < 1e-6)
+
+        # Neck: the headset turns 20 deg left and 10 deg up; the fake neck follows and the model's
+        # joints show it (head_j_pan positive = right, head_j_tilt positive = down).
+        head = []
+        node.create_subscription(JointState, "/openarm_leap/head/joint_states",
+                                 lambda m: head.append(dict(zip(m.name, m.position))), 10)
+        check("neck_anchored_on_the_front", spin_until(
+            lambda: "Head anchored" in processes[3].text(), 10.0),
+            next((l for l in processes[3].text().splitlines() if "anchored" in l), "")[-120:])
+        head.clear()
+        synth = subprocess.Popen([py, "-m", "openarm_quest_teleop.synth", "--config", str(CONFIG),
+                                  "--port", PAGE_PORT, "--scenario", "head"],
+                                 env={**os.environ, "PYTHONPATH": str(ROOT / "src")}, cwd=ROOT,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        while synth.poll() is None:
+            rclpy.spin_once(node, timeout_sec=0.02)
+        spin_until(lambda: False, 1.0)
+        pan = np.array([h["head_j_pan"] for h in head]) if head else np.zeros(1)
+        tilt = np.array([h["head_j_tilt"] for h in head]) if head else np.zeros(1)
+        check("neck_pans_left_with_the_headset", pan.min() < -0.25 and abs(pan[-1]) < 0.03,
+              f"head_j_pan min {pan.min():+.3f} rad, end {pan[-1]:+.3f} ({len(head)} samples)")
+        check("neck_tilts_up_with_the_headset", tilt.min() < -0.12 and abs(tilt[-1]) < 0.03,
+              f"head_j_tilt min {tilt.min():+.3f} rad, end {tilt[-1]:+.3f}")
+        check("neck_stays_in_its_window", np.all(np.abs(pan) <= np.radians(20) + 1e-3)
+              and np.all(np.abs(tilt) <= np.radians(15) + 1e-3))
     except Exception as error:  # noqa: BLE001
         check("completed", False, repr(error))
     finally:

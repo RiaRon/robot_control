@@ -11,7 +11,7 @@
 No hardware, no controller manager, no command. This is the only process that
 publishes TF for the integrated model, so no link is published by two
 robot_state_publishers. It reads each device's own joint states through the
-merger (openarm_rh56f1_joint_state_merger.py):
+merger (split_joint_state_merger.py):
 
     /openarm/joint_states         arms (14)        ─┐
     /rh56f1_right/joint_states    right hand (6)   ─┼─▶ /joint_states (measured)
@@ -36,6 +36,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from rh56f1_description import default_manifest_for  # noqa: E402
 from rh56f1_split_description import (  # noqa: E402
     DISPLAY_STATE_TOPIC,
@@ -85,8 +86,8 @@ def _setup(context: LaunchContext):
         ),
         Node(
             package="openarm_bringup",
-            executable="openarm_rh56f1_joint_state_merger.py",
-            name="openarm_rh56f1_joint_state_merger",
+            executable="split_joint_state_merger.py",
+            name="split_joint_state_merger",
             output="screen",
             arguments=merger_arguments,
         ),
@@ -98,7 +99,7 @@ def _setup(context: LaunchContext):
             name="rviz2",
             output="log",
             arguments=["-d", str(Path(get_package_share_directory("openarm_bringup"))
-                                 / "config/rviz/openarm_rh56f1_split.rviz")],
+                                 / "config/rviz/rh56f1/openarm_rh56f1_split.rviz")],
         ))
     return nodes
 

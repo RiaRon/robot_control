@@ -1,13 +1,17 @@
 # Quest controller -> OpenArm arm teleoperation, OpenArm + LEAP Hand on ROS 2 Jazzy,
-# IK solved by pink (Pinocchio QP differential IK). Same keys as quest_teleop.yaml;
+# IK solved by pink (Pinocchio QP differential IK). Same keys as ../rh56f1/quest_teleop.yaml;
 # only the teleop block differs. Pass it with --config to ros_bridge, ros_teleop,
 # monitor and synth, and run ros_teleop with robot_control/.venv/bin/python
 # (docs/leap_hand/quest-teleop-leap-pink.md).
 
 quest:
-  udp:
-    host: 0.0.0.0          # address this PC listens on
-    port: 5006             # the Quest app's default
+  # quest_view: the Quest Browser page served by openarm_quest_view.server (head
+  # camera in the headset); its poses come back on TCP 65432 (docs/leap_hand).
+  source: quest_view
+  quest_view:
+    host: 127.0.0.1
+    port: 65432            # quest_view's pose stream (HandUMI wire format)
+    page_port: 8787        # the page and its websocket (synth plays the page here)
   # Poses are published in this frame: Unity world re-expressed in the ROS
   # convention (x forward, y left, z up). It is not connected to the robot's
   # TF tree; the teleop uses only motion relative to the enable instant.
@@ -23,7 +27,8 @@ quest:
   topics:
     left: {pose: /quest/left/pose, joy: /quest/left/joy}
     right: {pose: /quest/right/pose, joy: /quest/right/joy}
-    reference_pose: /quest/reference/pose
+    reference_pose: /quest/reference/pose   # quest_view: the robot's front, once it is set
+    hmd_pose: /quest/hmd/pose               # the headset; the neck follows it
     status: /quest/status
 
 teleop:
@@ -109,3 +114,44 @@ teleop:
         left: left_joint_trajectory_controller
       joint_states_topic: /openarm/joint_states
       controller_manager: /controller_manager
+
+# Neck (Dynamixel pan/tilt under the head camera), run by openarm_head.ros_head. Values
+# follow motion_acq's station head section. ★ port, ids, home and signs are NOT measured
+# on this robot yet: port is empty, so --backend real refuses to start until it is set.
+head:
+  port: ""                 # /dev/serial/by-id/... of the neck's U2D2
+  baud: 1000000
+  rate_hz: 50
+  pan:
+    id: 1
+    home_deg: 0.0          # motor degrees (0 = tick 2048) when the camera looks at the robot's front
+    range_deg: 20.0        # window around home
+    sign: 1                # +1: motor degrees grow when the operator looks left
+  tilt:
+    id: 2
+    home_deg: 0.0
+    range_deg: 15.0
+    sign: 1                # +1: motor degrees grow when the operator looks up
+  motor:
+    model_number: 1240     # XC330-M288
+    operating_mode: 3
+    position_i_gain: 400
+    profile_acceleration: 20
+    profile_velocity: 50
+    start_tolerance_deg: 2.0
+    home_tolerance_deg: 2.0
+  filter:
+    deadband_deg: 0.5
+    min_cutoff_hz: 1.0
+    beta: 0.05
+    d_cutoff_hz: 1.0
+  limits:
+    max_velocity_deg_s: 60.0
+    max_acceleration_deg_s2: 300.0
+    home_speed_deg_s: 20.0
+  # The model's neck joints (RViz, recording): angle = sign * radians(operator angle from home).
+  # head_j_pan turns about -z (positive = right), head_j_tilt about +y (positive = down).
+  joint_states:
+    topic: /openarm_leap/head/joint_states
+    pan: {name: head_j_pan, sign: -1}
+    tilt: {name: head_j_tilt, sign: -1}

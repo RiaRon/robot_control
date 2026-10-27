@@ -10,10 +10,15 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # split_common
+
+from split_common import default_manifest_for  # noqa: F401
 
 
 HAND_CONFIGURATIONS = ("arm_only", "left", "right", "both")
@@ -41,13 +46,6 @@ def _enabled_sides(hand_configuration: str) -> set[str]:
     if hand_configuration == "arm_only":
         return set()
     return {hand_configuration}
-
-
-def default_manifest_for(canonical_urdf: Path) -> Path:
-    """``<stem>_manifest.yaml`` next to the canonical URDF."""
-
-    canonical_urdf = Path(canonical_urdf)
-    return canonical_urdf.with_name(canonical_urdf.stem + "_manifest.yaml")
 
 
 def ros2_control_joint_names(description: str) -> list[str]:
@@ -186,8 +184,7 @@ def render_control_description(
             mappings={
                 "canonical_urdf": str(temporary_path),
                 "control_xacro": str(
-                    wrapper_xacro.parent.parent
-                    / "ros2_control"
+                    wrapper_xacro.parent
                     / "openarm_rh56f1.bimanual.ros2_control.xacro"
                 ),
                 "hand_configuration": hand_configuration,

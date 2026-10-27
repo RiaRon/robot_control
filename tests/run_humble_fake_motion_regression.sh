@@ -59,14 +59,14 @@ echo "== check_urdf"
 python3 - <<PY
 import subprocess, sys
 from pathlib import Path
-sys.path.insert(0, "/humble_overlay/install/openarm_bringup/share/openarm_bringup/launch")
+sys.path.insert(0, "/humble_overlay/install/openarm_bringup/share/openarm_bringup/launch/rh56f1")
 from rh56f1_description import HAND_CONFIGURATIONS, RH56F1_STATE_POLICIES, render_control_description, ros2_control_joint_names
 share = Path("/humble_overlay/install/openarm_description/share/openarm_description")
 for policy in RH56F1_STATE_POLICIES:
     for configuration in HAND_CONFIGURATIONS:
         text = render_control_description(
             source_urdf=Path("/workspace/kuku_lab/urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"),
-            wrapper_xacro=share / "urdf/robot/openarm_rh56f1_bimanual.urdf.xacro",
+            wrapper_xacro=share / "urdf/rh56f1/openarm_rh56f1_bimanual.urdf.xacro",
             hand_configuration=configuration, state_policy=policy, use_fake_hardware=True)
         path = Path(f"/tmp/{policy}_{configuration}.urdf"); path.write_text(text)
         run = subprocess.run(["check_urdf", str(path)], capture_output=True, text=True)

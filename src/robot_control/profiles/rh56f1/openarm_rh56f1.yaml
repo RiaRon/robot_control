@@ -6,9 +6,9 @@ asset:
   # `joints:` list below reproduces in the same order; source names are its
   # source_to_canonical_joints entries (tests/test_profile_rh56f1.py).
   id: openarm_rh56f1_bi_rl
-  manifest: ../../../../urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml
+  manifest: ../../../../../urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml
   manifest_sha256: fc72ad75a1231b203f9d101a572ecbdbe5cd6281f51f44575368d2ba82c15780
-  urdf: ../../../../urdf/generated/rl/openarm_rh56f1_bi_rl.urdf
+  urdf: ../../../../../urdf/generated/rl/openarm_rh56f1_bi_rl.urdf
 ros:
   # command_rate_hz sets CommandGate's per-command step (velocity / rate):
   # 100 Hz with 2.0 rad/s gives 0.02 rad per command, the same as the

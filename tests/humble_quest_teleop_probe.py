@@ -54,7 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import humble_fake_hand_motion_probe as base  # noqa: E402
 import humble_split_bringup_probe as split_probe  # noqa: E402
 
-from openarm_quest_teleop.config import DEFAULT_CONFIG, load_config  # noqa: E402
+from openarm_quest_teleop.config import RH56F1_CONFIG, load_config  # noqa: E402
 from openarm_quest_teleop.packet import ControllerPose, ros_to_unity_pose  # noqa: E402
 from openarm_quest_teleop.synth import QuestSender, axis_rotation  # noqa: E402
 
@@ -81,6 +81,8 @@ class Process:
 
     def __init__(self, name: str, module: str, *args: str):
         self.name = name
+        if module.startswith("openarm_quest_teleop.") and "--config" not in args:
+            args = (*args, "--config", str(RH56F1_CONFIG))  # the packaged default is LEAP
         LOG_ROOT.mkdir(parents=True, exist_ok=True)
         self.log_path = LOG_ROOT / f"{name}.log"
         self.log = open(self.log_path, "w")
@@ -717,7 +719,7 @@ def scenario_guards():
         topic = "/quest_probe/real_looking_description"
         publisher = node.create_publisher(String, topic, latched)
         publisher.publish(String(data=real_text))
-        config = load_config(DEFAULT_CONFIG)
+        config = load_config(RH56F1_CONFIG)
         config["teleop"]["robot_description_topic"] = topic
         # No manager answers here, so the teleop falls back to the topic above.
         for runtime in config["teleop"]["runtimes"].values():

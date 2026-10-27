@@ -44,6 +44,7 @@ from launch_ros.actions import Node
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from device_guard import hold_device_lock, require_no_controller_manager  # noqa: E402
 from rh56f1_description import HAND_CONFIGURATIONS  # noqa: E402
 from rh56f1_real_description import (  # noqa: E402
@@ -119,7 +120,7 @@ def _setup(context: LaunchContext):
     description = render_real_control_description(
         source_urdf=canonical_urdf,
         manifest=manifest,
-        wrapper_xacro=description_share / "urdf/robot/openarm_rh56f1_bimanual_real.urdf.xacro",
+        wrapper_xacro=description_share / "urdf/rh56f1/openarm_rh56f1_bimanual_real.urdf.xacro",
         right_can_interface=_text(context, "right_can_interface"),
         left_can_interface=_text(context, "left_can_interface"),
         can_fd=_bool(context, "can_fd"),
@@ -135,7 +136,7 @@ def _setup(context: LaunchContext):
     static = yaml.safe_load(
         (
             Path(get_package_share_directory("openarm_bringup"))
-            / "config/controllers/openarm_rh56f1_real_controllers.yaml"
+            / "config/controllers/rh56f1/openarm_rh56f1_real_controllers.yaml"
         ).read_text()
     )
     with tempfile.NamedTemporaryFile(

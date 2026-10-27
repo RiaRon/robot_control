@@ -41,7 +41,7 @@ install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/openarm_rh56f1_joint_state_merger.py
+install(PROGRAMS scripts/split_joint_state_merger.py
   scripts/fake_trajectory_controller_prime.py
   scripts/robot_description_publisher.py
   DESTINATION lib/${PROJECT_NAME}

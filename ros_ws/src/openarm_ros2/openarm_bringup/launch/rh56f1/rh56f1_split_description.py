@@ -21,9 +21,12 @@ canonical joint names) or ``rh56f1_real_description.build_runtime_variant``
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 import xml.etree.ElementTree as ET
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # split_common
 
 from rh56f1_description import (
     FAKE_HAND_CONTROLLERS,
@@ -32,11 +35,16 @@ from rh56f1_description import (
     fake_hand_controller_params,
     render_control_description,
 )
+from split_common import (  # noqa: F401  (re-exported for the RH56F1 launch files)
+    FAKE_PLUGIN,
+    controller_manager,
+    prime_fake_trajectory_controllers,
+    ros2_control_blocks,
+)
 
 RUNTIMES = ("fake", "real")
 SIDES = ("right", "left")
 _PREFIX = {"right": "r", "left": "l"}
-FAKE_PLUGIN = "mock_components/GenericSystem"
 
 #: Arms: the root controller manager, as in openarm.bimanual.launch.py.
 ARM_NAMESPACE = ""
@@ -52,10 +60,6 @@ MERGED_STATE_TOPIC = "/joint_states"
 DISPLAY_STATE_TOPIC = "/openarm_rh56f1/display_joint_states"
 SOURCE_STATUS_TOPIC = "/openarm_rh56f1/joint_state_sources"
 DISPLAY_PLACEHOLDER_FRAME = "display_placeholder"
-
-
-def controller_manager(namespace: str) -> str:
-    return f"/{namespace}/controller_manager" if namespace else "/controller_manager"
 
 
 def _check_runtime(runtime: str) -> None:
@@ -117,25 +121,6 @@ def model_description(runtime: str, source_urdf: Path, manifest: Path | None = N
         root.remove(block)
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode", xml_declaration=True)
-
-
-def prime_fake_trajectory_controllers(spawner, manager: str, controllers: list[str]):
-    """Launch action: once *spawner* exits, run fake_trajectory_controller_prime.py.
-
-    joint_trajectory_controller 2.47.0 can start with its pending-goal flag
-    uninitialised and then silently drop topic trajectories; one finished
-    hold-at-measured action goal clears it (see the script). Fake managers only.
-    """
-    from launch.actions import RegisterEventHandler
-    from launch.event_handlers import OnProcessExit
-    from launch_ros.actions import Node
-
-    return RegisterEventHandler(OnProcessExit(target_action=spawner, on_exit=[Node(
-        package="openarm_bringup",
-        executable="fake_trajectory_controller_prime.py",
-        arguments=[*controllers, "--controller-manager", manager],
-        output="both",
-    )]))
 
 
 def fake_arm_description(source_urdf: Path, wrapper_xacro: Path) -> str:
@@ -236,23 +221,6 @@ def real_arm_description(
         arm_test_double=arm_test_double,
     )
     return description, plan
-
-
-def ros2_control_blocks(description: str) -> dict[str, dict]:
-    """name -> {plugin, joints, command interfaces} of every ros2_control block."""
-    blocks = {}
-    for block in ET.fromstring(description).findall("ros2_control"):
-        plugin = block.find("hardware/plugin")
-        joints = block.findall("joint")
-        blocks[block.get("name")] = {
-            "plugin": None if plugin is None else (plugin.text or "").strip(),
-            "joints": [joint.get("name") for joint in joints],
-            "commands": [
-                f"{joint.get('name')}/{command.get('name')}"
-                for joint in joints for command in joint.findall("command_interface")
-            ],
-        }
-    return blocks
 
 
 def state_sources(runtime: str, manifest: Path) -> list[dict]:

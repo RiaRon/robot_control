@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch"
+LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch/leap_hand"
 sys.path.insert(0, str(LAUNCH_DIR))
 
 import leap_split_description as leap  # noqa: E402

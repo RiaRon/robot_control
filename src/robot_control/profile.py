@@ -284,7 +284,12 @@ def load_profile(path: str | Path) -> RobotProfile:
 
 
 def load_builtin_profile(name: str) -> RobotProfile:
-    resource = files("robot_control").joinpath("profiles", f"{name}.yaml")
+    """``profiles/<name>.yaml``, or ``profiles/<hand>/<name>.yaml`` for a hand-specific robot."""
+    profiles = files("robot_control").joinpath("profiles")
+    resource = profiles.joinpath(f"{name}.yaml")
+    if not resource.is_file():
+        resource = next((d.joinpath(f"{name}.yaml") for d in profiles.iterdir()
+                         if d.is_dir() and d.joinpath(f"{name}.yaml").is_file()), resource)
     if not resource.is_file():
         raise ProfileError(f"unknown profile: {name}")
     return load_profile(Path(str(resource)))

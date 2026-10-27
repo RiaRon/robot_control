@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from rh56f1_description import HAND_CONFIGURATIONS, build_canonical_variant  # noqa: E402
 
 #: Canonical actuator order the rh56f1_hardware plugin binds by name.
@@ -310,8 +311,7 @@ def render_real_control_description(
                 "runtime_urdf": str(temporary[0]),
                 "control_contract": str(temporary[1]),
                 "control_xacro": str(
-                    wrapper_xacro.parent.parent
-                    / "ros2_control"
+                    wrapper_xacro.parent
                     / "openarm_rh56f1.bimanual.real.ros2_control.xacro"
                 ),
                 "right_can_interface": right_can_interface,

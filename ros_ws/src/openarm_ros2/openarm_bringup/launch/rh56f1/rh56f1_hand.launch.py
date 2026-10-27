@@ -43,6 +43,7 @@ from launch_ros.actions import Node
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from device_guard import hold_device_lock, require_no_controller_manager  # noqa: E402
 from rh56f1_description import FAKE_HAND_CONTROLLERS, default_manifest_for  # noqa: E402
 from rh56f1_split_description import (  # noqa: E402

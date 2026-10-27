@@ -14,11 +14,11 @@ from robot_control.profile import ProfileError, load_builtin_profile
 
 
 ROOT = Path(__file__).parents[1]
-PROFILE_PATH = ROOT / "src/robot_control/profiles/openarm_rh56f1.yaml"
+PROFILE_PATH = ROOT / "src/robot_control/profiles/rh56f1/openarm_rh56f1.yaml"
 CANONICAL_URDF = ROOT.parent / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
 CANONICAL_MANIFEST = ROOT.parent / "urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml"
 CONTROLLERS = (
-    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/"
+    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/rh56f1/"
     "openarm_rh56f1_real_controllers.yaml"
 )
 
@@ -147,7 +147,7 @@ def test_source_names_are_the_manifest_source_to_canonical_entries(profile):
 def test_per_command_step_matches_the_tesollo_profile(profile):
     """CommandGate steps at most velocity / command_rate_hz per command."""
     raw = yaml.safe_load(PROFILE_PATH.read_text())
-    tesollo = yaml.safe_load((PROFILE_PATH.parent / "openarm_tesollo.yaml").read_text())
+    tesollo = yaml.safe_load((PROFILE_PATH.parents[1] / "openarm_tesollo.yaml").read_text())
     for distro, endpoint in raw["ros"].items():
         rate = endpoint["command_rate_hz"]
         assert rate == tesollo["ros"][distro]["command_rate_hz"] == 100
@@ -202,7 +202,7 @@ def test_loading_fails_loudly_if_the_canonical_manifest_ever_drifts(tmp_path):
     confirm the loader refuses."""
     text = PROFILE_PATH.read_text().replace(
         "fc72ad75a1231b203f9d101a572ecbdbe5cd6281f51f44575368d2ba82c15780", "0" * 64
-    ).replace("../../../../urdf/", str(ROOT.parent / "urdf") + "/")
+    ).replace("../../../../../urdf/", str(ROOT.parent / "urdf") + "/")
     bad = tmp_path / "corrupt_openarm_rh56f1.yaml"
     bad.write_text(text)
 

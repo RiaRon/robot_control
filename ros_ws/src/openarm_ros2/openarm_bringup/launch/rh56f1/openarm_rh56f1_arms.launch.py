@@ -52,6 +52,7 @@ from launch_ros.actions import Node
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from device_guard import hold_device_lock, require_no_controller_manager  # noqa: E402
 from rh56f1_split_description import (  # noqa: E402
     ARM_NAMESPACE,
@@ -108,8 +109,8 @@ def _setup(context: LaunchContext):
 
     if runtime == "fake":
         description = fake_arm_description(
-            canonical_urdf, description_share / "urdf/robot/openarm_rh56f1_bimanual.urdf.xacro")
-        controllers_file = str(bringup_share / "config/controllers/openarm_rh56f1_fake_controllers.yaml")
+            canonical_urdf, description_share / "urdf/rh56f1/openarm_rh56f1_bimanual.urdf.xacro")
+        controllers_file = str(bringup_share / "config/controllers/rh56f1/openarm_rh56f1_fake_controllers.yaml")
         spawners = [
             ["joint_state_broadcaster"],
             ["left_joint_trajectory_controller", "right_joint_trajectory_controller"],
@@ -127,12 +128,12 @@ def _setup(context: LaunchContext):
 
         description, plan = real_arm_description(
             canonical_urdf, manifest,
-            description_share / "urdf/robot/openarm_rh56f1_bimanual_real.urdf.xacro",
+            description_share / "urdf/rh56f1/openarm_rh56f1_bimanual_real.urdf.xacro",
             right_can_interface=can["right"], left_can_interface=can["left"],
             can_fd=_bool(context, "can_fd"), enable_right_arm=enable["right"],
             enable_left_arm=enable["left"])
         static = yaml.safe_load(
-            (bringup_share / "config/controllers/openarm_rh56f1_real_controllers.yaml").read_text())
+            (bringup_share / "config/controllers/rh56f1/openarm_rh56f1_real_controllers.yaml").read_text())
         with tempfile.NamedTemporaryFile(
             mode="w", prefix="openarm_rh56f1_arms_controllers_", suffix=".yaml", delete=False
         ) as handle:

@@ -93,6 +93,7 @@ class QuestFrame:
     validity: int
     controllers: dict[str, ControllerInput]
     reference: ControllerPose | None
+    hmd: ControllerPose | None = None
 
 
 def _number(message: Mapping[str, Any], key: str, default: float | None = None) -> float:
@@ -192,6 +193,62 @@ def parse_packet(message: Mapping[str, Any]) -> QuestFrame:
     if message.get("rf") is not None and overall == VALID_OK:
         reference = unity_to_ros_pose(message["rf"], "rf")
     return QuestFrame(headset_time, overall, controllers, reference)
+
+
+# ------------------------------------------------- quest_view (HandUMI wire)
+#: quest_view (openarm_quest_view.server) re-publishes the headset page's poses as
+#: HandUMI frames: one JSON object per line on TCP, raw Unity coordinates.
+_HANDUMI_BUTTONS = {"left": ("buttonXPressed", "buttonYPressed"),
+                    "right": ("buttonAPressed", "buttonBPressed")}
+
+
+def _handumi_pose(position: Any, rotation: Any, label: str) -> ControllerPose:
+    if not isinstance(position, Mapping) or not isinstance(rotation, Mapping):
+        raise PacketError(f"{label} is not a position/rotation pair")
+    return unity_to_ros_pose({"x": position.get("x"), "y": position.get("y"),
+                              "z": position.get("z"), "qx": rotation.get("x"),
+                              "qy": rotation.get("y"), "qz": rotation.get("z"),
+                              "qw": rotation.get("w")}, label)
+
+
+def parse_handumi(message: Mapping[str, Any]) -> QuestFrame:
+    """Validate a quest_view frame; same result as :func:`parse_packet`.
+
+    The page sends the buttons as pressed / not pressed, so trigger and grip are
+    0 or 1. ``reference`` is the robot's front (set once per VR session through
+    quest_view's /front), ``hmd`` the headset pose; both None when absent.
+    """
+    if not isinstance(message, Mapping):
+        raise PacketError("frame is not a JSON object")
+    headset_time = _number(message, "ovrTimeNs") * 1e-9
+    controllers: dict[str, ControllerInput] = {}
+    for side in SIDES:
+        tracked = message.get(f"{side}Tracked") is True and message.get(f"{side}Valid") is True
+        pose = (_handumi_pose(message.get(f"{side}ControllerPosition"),
+                              message.get(f"{side}ControllerRotation"), f"{side} controller")
+                if tracked else None)
+        stick = message.get(f"{side}Joystick") or {}
+        if not isinstance(stick, Mapping):
+            raise PacketError(f"{side}Joystick is not an object")
+        primary, secondary = _HANDUMI_BUTTONS[side]
+        controllers[side] = ControllerInput(
+            side=side,
+            pose=pose,
+            validity=VALID_OK if tracked else VALID_INVALID,
+            trigger=float(_button(message, f"{side}TriggerPressed")),
+            grip=float(_button(message, f"{side}GripPressed")),
+            stick=(_number(stick, "x", 0.0), _number(stick, "y", 0.0)),
+            buttons=(_button(message, primary), _button(message, secondary)),
+        )
+    hmd = None
+    if "hmdPosition" in message:
+        hmd = _handumi_pose(message["hmdPosition"], message.get("hmdRotation"), "hmd")
+    front = message.get("front")
+    reference = None if front is None else _handumi_pose(
+        front.get("position") if isinstance(front, Mapping) else None,
+        front.get("rotation") if isinstance(front, Mapping) else None, "front")
+    overall = VALID_OK if hmd is not None else VALID_INVALID
+    return QuestFrame(headset_time, overall, controllers, reference, hmd)
 
 
 # ---------------------------------------------------------------- rotations

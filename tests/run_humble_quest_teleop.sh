@@ -63,10 +63,11 @@ cd /workspace/kuku_lab/robot_control
 python3 -m pytest -q -p no:cacheprovider tests/test_quest_teleop.py 2>&1 | tail -2
 
 echo "== receive-only monitor against synthetic packets"
-python3 -m openarm_quest_teleop.monitor --seconds 2.2 --period 1.0 > /tmp/monitor.txt &
+RH56F1_CFG=src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
+python3 -m openarm_quest_teleop.monitor --config "$RH56F1_CFG" --seconds 2.2 --period 1.0 > /tmp/monitor.txt &
 monitor=$!
 sleep 0.5
-python3 -m openarm_quest_teleop.synth --scenario still --seconds 1.5
+python3 -m openarm_quest_teleop.synth --config "$RH56F1_CFG" --scenario still --seconds 1.5
 wait "$monitor"
 tail -9 /tmp/monitor.txt
 

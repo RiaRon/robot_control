@@ -15,6 +15,7 @@ import yaml
 from openarm_quest_teleop import packet as pk
 from openarm_quest_teleop.config import (
     FAKE_PLUGIN,
+    RH56F1_CONFIG,
     ConfigError,
     _SignedChain,
     bind_arm,
@@ -42,7 +43,7 @@ ROOT = Path(__file__).resolve().parents[1]
 KUKU_LAB = ROOT.parent
 CANONICAL = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
 FAKE_CONTROLLERS = (
-    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/"
+    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/rh56f1/"
     "openarm_rh56f1_fake_controllers.yaml"
 )
 UPSTREAM = KUKU_LAB / "third_party/dora-openarm-vr/src/dora_openarm_vr"
@@ -59,7 +60,7 @@ PERIOD = 0.01
 def _description(naming: str = "canonical", plugin: str = FAKE_PLUGIN) -> str:
     """The canonical URDF plus a ros2_control block, as a bringup renders it."""
     root = ET.parse(CANONICAL).getroot()
-    profile = load_profile_for(load_config())
+    profile = load_profile_for(load_config(RH56F1_CONFIG))
     arm = [j for j in profile.joints if "_aj_" in j.canonical]
     rename = {j.canonical: j.source for j in arm} if naming == "source" else {}
     for joint in root.findall("joint"):
@@ -76,7 +77,7 @@ def _description(naming: str = "canonical", plugin: str = FAKE_PLUGIN) -> str:
 
 @pytest.fixture(scope="module")
 def config():
-    return load_config()
+    return load_config(RH56F1_CONFIG)
 
 
 @pytest.fixture(scope="module")

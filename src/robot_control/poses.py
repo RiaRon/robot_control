@@ -66,7 +66,11 @@ class TaughtPose:
 
 
 def default_poses_path(profile_name: str) -> Path:
-    return repository_root() / POSES_DIR / f"{profile_name}.yaml"
+    """``poses/<profile>.yaml``, or ``poses/<hand>/<profile>.yaml`` for a hand-specific robot."""
+    flat = repository_root() / POSES_DIR / f"{profile_name}.yaml"
+    if flat.exists():
+        return flat
+    return next(iter(sorted((repository_root() / POSES_DIR).glob(f"*/{profile_name}.yaml"))), flat)
 
 
 def load_poses(path: Path, profile: str) -> dict[str, TaughtPose]:

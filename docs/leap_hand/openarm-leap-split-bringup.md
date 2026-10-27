@@ -28,7 +28,7 @@ OpenArm + RH56F1 분리 bringup(`docs/rh56f1/openarm-rh56f1-split-bringup.md`)�
   - 모터 번호 대응은 manifest `source_to_canonical_joints`에 있다(`leap_right_1 → r_hj_index_1` 등).
 - **CM에 넘기는 description:** 통합 모델 전체에, 그 CM이 소유한 ros2_control 블록 하나만 더한 것이다.
 - **fake trajectory controller 준비:** RH56F1과 같은 `fake_trajectory_controller_prime.py`로, spawn 직후 한 번 측정 위치에 고정한다.
-- **상태 합치기:** RH56F1과 같은 merger(`openarm_rh56f1_joint_state_merger.py`, 손 종류와 무관)를 쓴다. 출력 토픽은 다음과 같다.
+- **상태 합치기:** RH56F1과 같은 merger(`split_joint_state_merger.py`, 손 종류와 무관)를 쓴다. 출력 토픽은 다음과 같다.
   - `/joint_states`
   - `/openarm_leap/display_joint_states` (robot_state_publisher 입력)
   - `/openarm_leap/joint_state_sources`

@@ -43,7 +43,7 @@ import tf2_ros
 from trajectory_msgs.msg import JointTrajectoryPoint
 from ament_index_python.packages import get_package_share_directory
 
-LAUNCH_DIR = Path(get_package_share_directory("openarm_bringup")) / "launch"
+LAUNCH_DIR = Path(get_package_share_directory("openarm_bringup")) / "launch" / "rh56f1"
 sys.path.insert(0, str(LAUNCH_DIR))
 import rh56f1_real_description as real  # noqa: E402
 
@@ -51,9 +51,9 @@ KUKU = Path(os.environ.get("KUKU_LAB_ROOT", "/workspace/kuku_lab"))
 CANONICAL = KUKU / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
 MANIFEST = KUKU / "urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml"
 WRAPPER = (Path(get_package_share_directory("openarm_description"))
-           / "urdf/robot/openarm_rh56f1_bimanual_real.urdf.xacro")
+           / "urdf/rh56f1/openarm_rh56f1_bimanual_real.urdf.xacro")
 STATIC_CONTROLLERS = (Path(get_package_share_directory("openarm_bringup"))
-                      / "config/controllers/openarm_rh56f1_real_controllers.yaml")
+                      / "config/controllers/rh56f1/openarm_rh56f1_real_controllers.yaml")
 LOG_ROOT = Path(os.environ.get("PROBE_LOG_DIR", "/tmp/rh56f1_probe"))
 INITIAL = [0.30, 0.20, 0.30, 0.30, 0.30, 0.30]
 FAULT_WRITE_BITS = {"comm_stale": 1, "transport": 2, "device": 4, "non_finite": 8}

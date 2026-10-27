@@ -42,6 +42,7 @@ from launch_ros.actions import Node
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from device_guard import require_no_controller_manager  # noqa: E402
 from leap_split_description import (  # noqa: E402
     ARM_CONTROLLERS,

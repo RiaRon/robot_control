@@ -3,7 +3,7 @@
 Quest 팔 원격조종(`docs/rh56f1/quest-teleop.md`, `src/openarm_quest_teleop`)의 IK를 **pink 하나로 바꾸고**(2026-10-08, 이전의 numpy DLS는 삭제), OpenArm + LEAP 분리 bringup(`docs/leap_hand/openarm-leap-split-bringup.md`)에 붙였다. RH56F1 설정도 같은 pink IK를 쓴다.
 
 ```text
-Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy
+Quest 브라우저 페이지 ─USB ws─▶ quest_view ─TCP 65432─▶ ros_bridge ─▶ /quest/<side>/pose, /joy, /quest/hmd/pose
   ─▶ ros_teleop --config quest_teleop_leap.yaml
        클러치(grip) → 시작 시점 기준 상대 손바닥 목표 → pink IK (팔 7축, 손바닥 r_hl_palm) → CommandGate
   ─▶ /<side>_joint_trajectory_controller/joint_trajectory (100 Hz) ─▶ fake OpenArm (GenericSystem)
@@ -15,6 +15,7 @@ Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy
 |---|---|
 | pink IK, 원격조종 코어, 시작 자세 (ROS 없음) | `tests/test_quest_teleop_leap_pink.py` 12개 통과 |
 | 합성 Quest → bridge → pink teleop → fake 팔 (Jazzy), 시작 자세 이동 포함 | `tests/jazzy_leap_quest_teleop_probe.py` 17개 항목 PASS |
+| quest_view 입력으로 교체 + 목 추종 (fake, 2026-10-27) | `tests/test_quest_view_bridge.py`, probe 23개 항목 PASS |
 | 실제 Quest 헤드셋 | 미검증 |
 | 실제 OpenArm, 실제 LEAP | **없음.** LEAP 설정에는 fake 런타임만 있다 |
 
@@ -27,11 +28,11 @@ Quest 앱 ─UDP JSON─▶ ros_bridge ─▶ /quest/<side>/pose, /joy
 - **`ik.py`:** 설정(`IkSettings`)과 결과(`IkResult`)만 남았다. 이전 DLS(`solve_pose`)는 삭제했고, `ik.damping`과 `ik.max_iteration_step_rad`는 이제 쓰이지 않는다.
 - **`teleop.py`:** `ArmTeleop(..., solve=...)`는 IK를 반드시 받는다. `config.build_teleop`이 pink를 만든다.
 - **`config.py`:** `teleop.pink` 설정으로 PinkIk를 만든다. pink가 없으면 설치 방법을 담은 `ConfigError`를 낸다.
-- **`config/quest_teleop_leap.yaml`:** LEAP 설정.
+- **`config/leap_hand/quest_teleop_leap.yaml`:** LEAP 설정.
   - profile `openarm_leap`, 손바닥 `r_hl_palm` / `l_hl_palm`
   - description 토픽 `/openarm_leap/arms/robot_description` (Jazzy controller manager에는 파라미터가 없다)
   - fake 런타임만 있음
-- **`src/robot_control/profiles/openarm_leap.yaml` + `components/leap.yaml`:** LEAP 로봇 정의.
+- **`src/robot_control/profiles/leap_hand/openarm_leap.yaml` + `components/leap_hand/leap.yaml`:** LEAP 로봇 정의.
   - 46관절이고, 자산 manifest는 urdf 저장소의 `generated/rl/openarm_leap_bi_rl_manifest.yaml`이다.
   - 손 관절의 원래 이름은 LEAP 모터 번호다(`leap_right_0..15`).
 
@@ -63,28 +64,39 @@ python3 -m pip --python .venv/bin/python install "pin-pink==4.4.0" daqp
 cd kuku_lab/robot_control
 source /opt/ros/jazzy/setup.bash && source ros_ws/install/setup.bash
 export PYTHONPATH=$PWD/src:$PYTHONPATH
-CFG=src/openarm_quest_teleop/config/quest_teleop_leap.yaml
+CFG=src/openarm_quest_teleop/config/leap_hand/quest_teleop_leap.yaml
 
 # 터미널 A: fake 팔 + 모델 + RViz (손은 선택: leap_hand.launch.py side:=right)
 ros2 launch openarm_bringup openarm_leap_arms.launch.py use_rviz:=true
 
-# 터미널 B: Quest UDP → ROS
+# 터미널 Q: quest_view (헤드셋 페이지, 머리 카메라; 카메라 없으면 --test-pattern) + 헤드셋 연결
+.venv/bin/python -m openarm_quest_view.server
+scripts/quest_view.sh view
+
+# 터미널 B: quest_view TCP 65432 → ROS
 .venv/bin/python -m openarm_quest_teleop.ros_bridge --config $CFG
+
+# 터미널 H: 목 (fake; Space로 추종 시작/멈춤). 먼저 로봇 정면: 헤드셋으로 정면을 1초 보고
+#   curl -X POST http://127.0.0.1:8787/front
+.venv/bin/python -m openarm_head.ros_head --config $CFG
 
 # 터미널 C: 원격조종 (먼저 dry run, 이상 없으면 --execute: 시작 자세로 옮긴 뒤 grip을 기다린다)
 .venv/bin/python -m openarm_quest_teleop.ros_teleop --config $CFG --arm right --runtime fake
 .venv/bin/python -m openarm_quest_teleop.ros_teleop --config $CFG --arm right --runtime fake --execute
 
-# Quest 없이: 합성 입력 (grip, 앞/왼쪽/위 5 cm 갔다 오기)
-.venv/bin/python -m openarm_quest_teleop.synth --config $CFG --scenario axes
+# Quest 없이: 합성 페이지 입력 (quest_view 서버 필요; grip, 앞/왼쪽/위 5 cm 갔다 오기 / 고개 돌리기)
+.venv/bin/python -m openarm_quest_teleop.synth --config $CFG --scenario axes --set-front
+.venv/bin/python -m openarm_quest_teleop.synth --config $CFG --scenario head --set-front
 ros2 topic echo /quest_teleop/right/status
 ```
 
-- 실제 Quest 앱은 이 PC의 UDP 5006으로 보낸다(설정 `quest.udp`).
+- 입력은 `quest.source: quest_view`(TCP 127.0.0.1:65432)다. 예전 dora 앱 UDP 입력은 RH56F1 설정(`quest_teleop.yaml`)에만 남아 있고, LEAP 설정에서는 쓰지 않는다.
+- 목 설정은 `head:` 섹션이다. 값은 motion_acq에서 옮긴 임시값이고, `port`가 비어 있어 `--backend real`은 거부된다. 목 각도는 `/openarm_leap/head/joint_states`(`head_j_pan`, `head_j_tilt`)로 나가 RViz 모델이 따라 돈다.
+- 사람용 순서는 `docs/leap_hand/leap-quest-teleop-guide.md`.
 - 왼팔은 `--arm left`다. 한 프로세스에 한 팔이다.
 - **시작 자세:** `--execute`로 띄우면 grip을 받기 전에 그 팔을 `rh56f1_aglt_home`으로 먼저 옮긴다.
   - 이 자세는 RH56F1 로봇의 홈이다. 출처는 sim2real `deploy/policy_control/config/homes/rh56f1_aglt.yaml`(`2f8a803`, 9/29)로, hdgp `rh_aglt` 시작 자세이고 왼팔은 거울이다. 10/06까지 RH56F1 미션의 home·rehome 단계가 이 자세를 썼다.
-  - 값은 robot_control `poses/openarm_leap.yaml`에 있다.
+  - 값은 robot_control `poses/leap_hand/openarm_leap.yaml`에 있다.
   - 이동 방식: 측정 자세에서 FollowJointTrajectory 한 번. 가장 많이 움직이는 관절 기준 0.3 rad/s, 최소 3초. 도착(모든 관절 0.02 rad 이내)을 확인한 뒤에만 원격조종 루프가 시작된다.
   - 설정은 `teleop.start_pose`다. `--start-pose NAME`으로 바꾸고, `--no-start-pose`로 건너뛴다. dry run은 움직이지 않고 "옮길 예정"만 알린다.
   - 완전히 편 영점 자세(팔이 곧게 아래로)는 특이 자세라 IK가 빠져나오지 못한다. `--no-start-pose`로 영점에서 시작하지 말 것.
@@ -99,7 +111,7 @@ ros2 topic echo /quest_teleop/right/status
 - 이 두 경우는 **의도된 안전 동작**이다. 팔이 튀지 않고 멈춘다.
 - 녹화 동작(앞 10 cm, 바깥 6 cm, 아래 6 cm, 손목 −20°/+20°, 반지름 5 cm 원)은 양팔 모두 IK 실패와 속도 제한 0회였다. 관절 여유는 최소 0.084 rad였다.
 
-녹화: `figure/openarm_leap_pink_quest_teleop.{mp4,webm}` (약 28초, 20 fps, RViz, 회전 추종 모드).
+녹화: `figure/leap_hand/openarm_leap_pink_quest_teleop.{mp4,webm}` (약 28초, 20 fps, RViz, 회전 추종 모드).
 - 영점 → 시작 자세(5.9초) → 합성 Quest 양손 입력.
 - 양손 목표 자세(`/quest_teleop/<arm>/target_pose`)를 좌표축으로 표시해, 손바닥이 그 축을 따라가는 것이 보인다.
 
@@ -107,21 +119,22 @@ ros2 topic echo /quest_teleop/right/status
 
 ```bash
 cd kuku_lab/robot_control
-.venv/bin/python -m pytest -q tests/test_quest_teleop.py tests/test_quest_teleop_leap_pink.py   # pink 없는 python3에서는 teleop 코어 항목 skip
+.venv/bin/python -m pytest -q tests/test_quest_teleop.py tests/test_quest_teleop_leap_pink.py tests/test_quest_view_bridge.py tests/test_head_retarget.py   # pink 없는 python3에서는 teleop 코어 항목 skip
 source /opt/ros/jazzy/setup.bash && source ros_ws/install/setup.bash
 ROS_DOMAIN_ID=176 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST .venv/bin/python tests/jazzy_leap_quest_teleop_probe.py
 ```
 
-probe는 UDP 15006을 쓴다(실제 앱의 5006과 겹치지 않게). 확인 항목은 다음과 같다.
+probe는 quest_view를 테스트 화면으로 띄우고 실제와 겹치지 않는 포트(페이지 18787, 자세 TCP 16543)를 쓴다. 합성 페이지 입력 → quest_view → 브리지 → teleop / 목의 전체 경로다. 확인 항목은 다음과 같다.
 - 팔 controller active, 영점에서 출발 → teleop이 시작 자세로 이동(약 5.9초, 오차 0.02 rad 이내), 도착 전에는 연결 안 됨
 - teleop이 pink와 `r_hl_palm`으로 실행되는지
 - 연결 1회, 명령 스트리밍, IK 오차 허용 범위 안, IK 실패 없음
 - 손바닥이 앞·왼쪽·위로 각 5 cm 따라가고, 목표와의 차이가 1 cm 미만, 끝나면 원위치
-- 놓으면 idle, 왼팔 무변화, 세 프로세스 정상 종료
+- 놓으면 idle, 왼팔 무변화, 프로세스 정상 종료
+- 목: 정면이 정해진 뒤 추종 시작, 왼쪽 20° → `head_j_pan` 음수(약 −0.34 rad) 후 복귀, 위 10° → `head_j_tilt` 음수, 범위 안
 
 ## 5. 아직 없는 것
 
-- 실제 Quest 헤드셋 확인
+- 실제 Quest 헤드셋 확인, 실제 머리 카메라 영상, 실물 목(포트·ID·홈·방향 측정)
 - real 런타임 (팔 real launch의 Jazzy 대응, LEAP Dynamixel ros2_control)
 - 손가락 원격조종 (Quest 손 추적 또는 글러브 → LEAP 16관절)
 - Humble 컨테이너 회귀(`tests/run_humble_*.sh`)의 이미지에는 pink가 없어, 그 안의 Quest teleop probe는 pink를 설치하기 전까지 실패한다.

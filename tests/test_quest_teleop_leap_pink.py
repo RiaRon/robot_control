@@ -14,17 +14,16 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch"
+LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch/leap_hand"
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(LAUNCH_DIR))
 
 import leap_split_description as leap  # noqa: E402
 from openarm_quest_teleop.config import (  # noqa: E402
-    DEFAULT_CONFIG, ConfigError, bind_arm, build_teleop, load_config, load_profile_for)
+    LEAP_CONFIG, RH56F1_CONFIG, ConfigError, bind_arm, build_teleop, load_config, load_profile_for)
 from openarm_quest_teleop.ik import IkSettings  # noqa: E402
 from openarm_quest_teleop.teleop import ENGAGED, ControllerSample, JointSample  # noqa: E402
 
-LEAP_CONFIG = DEFAULT_CONFIG.with_name("quest_teleop_leap.yaml")
 CANONICAL = leap.default_canonical_urdf(str(LAUNCH_DIR / "openarm_leap_arms.launch.py"))
 pytestmark = pytest.mark.skipif(not CANONICAL, reason="openarm_leap_bi_rl.urdf not found")
 BENT = np.array([0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0])  # the fake start pose of docs/rh56f1/quest-teleop.md
@@ -138,7 +137,7 @@ def test_without_pink_the_teleop_refuses_to_build(urdf, setup, monkeypatch):
 
 
 def test_both_teleop_configs_carry_pink_settings():
-    for path in (DEFAULT_CONFIG, LEAP_CONFIG):
+    for path in (RH56F1_CONFIG, LEAP_CONFIG):
         teleop = load_config(path)["teleop"]
         assert "ik_backend" not in teleop and teleop["pink"]["solver"] == "daqp"
 
@@ -190,4 +189,4 @@ def test_start_move_is_slow_and_never_shorter_than_the_minimum(setup):
 def test_the_rh56f1_config_names_no_start_pose():
     from openarm_quest_teleop.config import start_pose_settings
 
-    assert start_pose_settings(load_config(DEFAULT_CONFIG))["name"] is None
+    assert start_pose_settings(load_config(RH56F1_CONFIG))["name"] is None

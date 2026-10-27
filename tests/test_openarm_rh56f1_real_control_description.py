@@ -20,7 +20,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 KUKU_LAB = ROOT.parent
-LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch"
+LAUNCH_DIR = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch/rh56f1"
 sys.path.insert(0, str(LAUNCH_DIR))
 
 from rh56f1_description import HAND_CONFIGURATIONS  # noqa: E402
@@ -30,11 +30,11 @@ import rh56f1_real_description as real  # noqa: E402
 CANONICAL = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
 MANIFEST = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml"
 DESCRIPTION_SRC = ROOT / "ros_ws/src/openarm_description"
-REAL_CONTROL_XACRO = DESCRIPTION_SRC / "urdf/ros2_control/openarm_rh56f1.bimanual.real.ros2_control.xacro"
-FAKE_CONTROL_XACRO = DESCRIPTION_SRC / "urdf/ros2_control/openarm_rh56f1.bimanual.ros2_control.xacro"
+REAL_CONTROL_XACRO = DESCRIPTION_SRC / "urdf/rh56f1/openarm_rh56f1.bimanual.real.ros2_control.xacro"
+FAKE_CONTROL_XACRO = DESCRIPTION_SRC / "urdf/rh56f1/openarm_rh56f1.bimanual.ros2_control.xacro"
 SAFETY = DESCRIPTION_SRC / "config/rh56f1/real_bringup_safety.yaml"
 CONTROLLERS = (
-    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/"
+    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/rh56f1/"
     "openarm_rh56f1_real_controllers.yaml"
 )
 REAL_LAUNCH = LAUNCH_DIR / "openarm.rh56f1_bimanual_real.launch.py"
@@ -329,7 +329,7 @@ def _render(**overrides):
         pytest.skip("openarm_description is not installed in this environment")
     options = dict(
         source_urdf=CANONICAL, manifest=MANIFEST,
-        wrapper_xacro=share / "urdf/robot/openarm_rh56f1_bimanual_real.urdf.xacro",
+        wrapper_xacro=share / "urdf/rh56f1/openarm_rh56f1_bimanual_real.urdf.xacro",
         hand_configuration="both", right_can_interface="can0", left_can_interface="can1",
         can_fd=True, enable_right_arm=True, enable_left_arm=True,
         right_hand_transport="rs485", left_hand_transport="rs485",

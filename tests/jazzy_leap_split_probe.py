@@ -40,7 +40,7 @@ import tf2_ros
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]
-                       / "ros_ws/src/openarm_ros2/openarm_bringup/launch"))
+                       / "ros_ws/src/openarm_ros2/openarm_bringup/launch/leap_hand"))
 import leap_split_description as leap  # noqa: E402
 
 CANONICAL = Path(leap.default_canonical_urdf(__file__))

@@ -33,7 +33,7 @@ KUKU_LAB = ROOT.parent
 VENDORED = ROOT / "third_party/inspire_hand_senseglove_teleop"
 METADATA = ROOT / "vendor_metadata/inspire_hand_senseglove_teleop/UPSTREAM.yaml"
 ORIGINAL = KUKU_LAB / "third_party/inspire_hand-main_2026-10-03/inspire_hand-main"
-LAUNCH = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch/rh56f1_glove_input.launch.py"
+LAUNCH = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch/rh56f1/rh56f1_glove_input.launch.py"
 SOURCE_ORDER = ("pinky_proximal_joint", "ring_proximal_joint", "middle_proximal_joint",
                 "index_proximal_joint", "thumb_proximal_pitch_joint", "thumb_proximal_yaw_joint")
 CLOSED = {"pinky_proximal_joint": 1.47, "ring_proximal_joint": 1.47,

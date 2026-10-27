@@ -1,4 +1,7 @@
-"""rclpy node: Quest UDP packets -> PoseStamped and Joy topics.
+"""rclpy node: Quest input -> PoseStamped and Joy topics.
+
+The input is ``quest.source`` in the config: ``quest_view`` (the headset page's
+poses from quest_view, TCP 65432) or ``udp`` (the dora-openarm-vr app's packets).
 
 Publishes, per controller (topic names and frame from the config):
 
@@ -8,7 +11,8 @@ Publishes, per controller (topic names and frame from the config):
                                              buttons [primary, secondary, pose_valid]
                                              (primary/secondary: A/B right, X/Y left)
 
-plus the packet's reference pose and a JSON status string once a second. Both
+plus the packet's reference pose (quest_view: the robot's front), the headset
+pose (quest_view, ``topics.hmd_pose``) and a JSON status string once a second. Both
 messages of one packet carry the same ``header.stamp``: this PC's clock when
 the datagram was read. A packet is published once. When the Quest stops
 sending, the topics go quiet rather than repeat the last pose, which is what
@@ -27,9 +31,9 @@ import time
 import numpy as np
 
 from .config import load_config
-from .packet import SIDES, PacketError, parse_packet
+from .packet import SIDES, PacketError
+from .quest_view_receiver import open_source
 from .smoothing import OneEuroPoseSmoother
-from .udp_receiver import JsonUdpReceiver
 
 
 #: How far the headset clock must fall back to be read as an app restart
@@ -44,13 +48,11 @@ def _stamp(message, recv_ns: int) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--config", help="quest_teleop.yaml (default: the packaged one)")
+    parser.add_argument("--config", help="teleop config (default: config/leap_hand/quest_teleop_leap.yaml; RH56F1: config/rh56f1/quest_teleop.yaml)")
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
     args = parser.parse_args(argv)
     config = load_config(args.config)["quest"]
-    host = args.host or config["udp"]["host"]
-    port = args.port or int(config["udp"]["port"])
 
     import rclpy
     from geometry_msgs.msg import PoseStamped
@@ -67,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         side: node.create_publisher(Joy, topics[side]["joy"], 10) for side in SIDES
     }
     reference_publisher = node.create_publisher(PoseStamped, topics["reference_pose"], 10)
+    hmd_publisher = (node.create_publisher(PoseStamped, topics["hmd_pose"], 10)
+                     if "hmd_pose" in topics else None)
     status_publisher = node.create_publisher(String, topics["status"], 10)
 
     smoothing = config.get("smoothing", {})
@@ -75,8 +79,8 @@ def main(argv: list[str] | None = None) -> int:
         options = {key: float(value) for key, value in smoothing.items() if key != "enabled"}
         smoothers = {side: OneEuroPoseSmoother(**options) for side in SIDES}
 
-    receiver = JsonUdpReceiver(host, port)
-    node.get_logger().info(f"listening for Quest packets on UDP {host}:{port}")
+    receiver, parse, source = open_source(config, args.host, args.port)
+    node.get_logger().info(f"reading Quest input from {source}")
     frame_id = config["frame_id"]
     state = {"sequence": 0, "refused": 0, "last_error": None, "last_headset_time": None,
              "published": 0, "window_start": time.monotonic(), "window_count": 0}
@@ -96,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
             return
         state["sequence"] = packet.sequence
         try:
-            frame = parse_packet(packet.message)
+            frame = parse(packet.message)
             # A repeated or out-of-order datagram is not a new measurement. A
             # clock that fell back by more than the window is the app having
             # restarted, which starts a new sequence.
@@ -136,13 +140,15 @@ def main(argv: list[str] | None = None) -> int:
             joy_publishers[side].publish(joy)
         if frame.reference is not None:
             reference_publisher.publish(pose_message(frame.reference, packet.recv_ns))
+        if frame.hmd is not None and hmd_publisher is not None:
+            hmd_publisher.publish(pose_message(frame.hmd, packet.recv_ns))
 
     def publish_status():
         accepted, malformed = receiver.counts()
         latest = receiver.latest()
         elapsed = time.monotonic() - state["window_start"]
         status = {
-            "udp": f"{host}:{port}",
+            "source": source,
             "bind_error": receiver.bind_error(),
             "datagrams_accepted": accepted,
             "datagrams_malformed": malformed,

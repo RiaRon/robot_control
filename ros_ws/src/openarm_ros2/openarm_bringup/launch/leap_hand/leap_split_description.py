@@ -1,6 +1,6 @@
 """Descriptions and state ownership for the split OpenArm + LEAP Hand bringup (fake only).
 
-Same layout as the OpenArm + RH56F1 split bringup (rh56f1_split_description):
+Same layout as the OpenArm + RH56F1 split bringup (../rh56f1):
 one controller manager per hardware owner,
 
     arms        /controller_manager               14 arm joints
@@ -23,14 +23,17 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+import sys
 import xml.etree.ElementTree as ET
 
 import yaml
 
-from rh56f1_description import default_manifest_for
-from rh56f1_split_description import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # split_common
+
+from split_common import (
     FAKE_PLUGIN,
     controller_manager,
+    default_manifest_for,
     prime_fake_trajectory_controllers,
     ros2_control_blocks,
 )

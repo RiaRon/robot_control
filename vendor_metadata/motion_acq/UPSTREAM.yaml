@@ -1,0 +1,50 @@
+name: motion_acq
+source: https://github.com/KUKU-Robot-Lab/motion_acq (main, by divingyoon; derived from HandUMI, murobotics-ai/handumi-sw)
+commit: 01dc218
+imported_at: 2026-10-27
+license: Apache-2.0  # vendor_metadata/motion_acq/LICENSE, copied unchanged
+purpose: >-
+  quest_view (the Quest Browser WebXR page: head camera in the headset, poses back to the PC on
+  TCP 65432) and the neck (headset yaw/pitch -> Dynamixel pan/tilt), used by the OpenArm + LEAP
+  teleop on ROS 2 Jazzy.
+vendored:
+  src/openarm_quest_view/: quest_view/{__init__,server,convert,front,devtools,link}.py, quest_view/web/*
+  src/openarm_head/: head/{__init__,config,retarget,dynamixel,session}.py, filters.py
+  scripts/quest_view.sh: scripts/quest_usb.sh
+  tests/: test_head_retarget.py, test_head_sdk_bus.py, test_quest_link.py, head_helpers.py
+not_vendored: the arm teleop (DLS / pyroki IK, openarm_can driver), tracking providers, recorder, console, hand (RH56F1 / Nova 2)
+local_modifications:
+  - imports renamed motion_acq.quest_view -> openarm_quest_view, motion_acq.head / motion_acq.filters -> openarm_head
+  - server.py: no motion_acq.cpu keep_off_rt (no RH56F1 EtherCAT cores here)
+  - head/retarget.py: local quat_to_matrix instead of motion_acq.tracking.transforms
+  - head/session.py: HmdSample dataclass instead of motion_acq.tracking.base.ControllerPairSample (same fields read)
+  - head/config.py: reads the head section from a YAML file directly (no station rig loader)
+  - head/dynamixel.py: install hint for dynamixel-sdk points at robot_control/.venv
+  - scripts/head_teleop.py -> src/openarm_head/ros_head.py (new file): same start / follow / home loop, headset pose and front from the bridge's ROS topics, measured angles to /openarm_leap/head/joint_states
+  - quest_usb.sh -> quest_view.sh: HandUMI app commands (install, forward, launch, app) removed; devtools module path
+  - web/index.html: title
+  - script references quest_usb.sh -> quest_view.sh (server.py, link.py, web/viewer.js); server.py usage line
+  - tests: imports and script name; test_mock_unity_motion_signs_match_tracking_frame replaced by a WebXR -> quest_view -> bridge sign test
+upstream_sha256:
+  src/motion_acq/quest_view/__init__.py: a3e799fce518b0017c1685aa40dfce4adc1e13375e33475b1d2407603346176c
+  src/motion_acq/quest_view/server.py: e7da0be8bbd151d4ae2465c5a8a89277b5c3ad72244e9cb48cb4bf7caa568e0f
+  src/motion_acq/quest_view/convert.py: e7574c5e4a1e9181d29e0cff0c5713e004eabcc0723722b8b0dba47b9b10178d
+  src/motion_acq/quest_view/front.py: ee68e3f2f655046fab32971f5d47118407474dd83ad3e0dc83657d25632c062a
+  src/motion_acq/quest_view/devtools.py: a2fd68c6e3f452aac20f4174944ea0e55e58ddb03f14df7c767608820f5d79c6
+  src/motion_acq/quest_view/link.py: dd77b26677342e820b9f168667b85f363fcf26cc96a0f4248418977e830a082b
+  src/motion_acq/quest_view/web/index.html: 4b929949fb786e87e3f65c5926827221720727d429112616f73ff8430bf03269
+  src/motion_acq/quest_view/web/viewer.js: b64ad2328c5cc45d6c7042bddd6d19685e2479541c6a3d0614fd9b46f00cb1bd
+  src/motion_acq/quest_view/web/view_mode.js: 41238f491694308bf980cc256c5f640ffbe98ae460ec1e5d2d27b14d8e57cfa7
+  src/motion_acq/head/__init__.py: f59ba25915687d17b59fdadc76cb53f1db953dcf3f93639373bf4c12e9200f8a
+  src/motion_acq/head/config.py: ea186743f2962d8695633d8b575ac75f91cc4249ac4965ac09f20e6d05b28f92
+  src/motion_acq/head/retarget.py: de4186519e735413a69f6e8ab6f6f8b476bd3ded1d098ecbc141e571c05847eb
+  src/motion_acq/head/dynamixel.py: 8f31e4976eaf6e4b962ce0ec2f4dfd3c8854e6269f2e6e692a773c2b7b362352
+  src/motion_acq/head/session.py: d219e585a599fd6784cbc6d1eea7ab2c47b14efc738c0ee572ca8f615ef47f01
+  src/motion_acq/filters.py: a28e9e79b21f0e2c3de70b791affed9cdd0b7de51deee5e48b090eff84a60226
+  scripts/quest_usb.sh: e8a3da21b4b1eca40273bc2494b66d0c0544e0f4bb2ef55fdd6f86b48d154f74
+  src/motion_acq/scripts/head_teleop.py: e4d66478034719c584f5ed23a54bf9fb26b2da3707d2bf76b1fa1d60a408b8bc
+  src/motion_acq/teleop/common.py: 56a6cc116f984516514cf1e68edbbee5b6c3c55bb09971ea2434fec59cb97565
+  tests/test_head_retarget.py: b959effed757e4f35bc254f7538ce74246ff5f057c8f78fc37c4f8f0dc7b6788
+  tests/test_head_sdk_bus.py: 6fb4be0f4f8c3455a7f3cb28c7c632ed009c1399b8625c6cd910f3095544d34b
+  tests/test_quest_link.py: 7aec71494d4ee97dc145eecda0bb9726027b10d119f67ade9a62e5b8cd6df91c
+  tests/head_helpers.py: 1cdb1d7bf72b203b822bef765aeee339f992ef9e441bda8824f0d32007752eb1

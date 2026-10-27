@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Integrated joint states for the split OpenArm + RH56F1 bringup.
+"""Integrated joint states for a split OpenArm + hand bringup (RH56F1 or LEAP; topics are arguments).
 
 Each device publishes its own joint states (arms ``/openarm/joint_states``,
 hands ``/rh56f1_<side>/joint_states``). This node is the only publisher of the
@@ -185,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
                       args.stale_after_sec)
 
     rclpy.init(args=ros_args)
-    node = rclpy.create_node("openarm_rh56f1_joint_state_merger")
+    node = rclpy.create_node("split_joint_state_merger")
     merged = node.create_publisher(JointState, args.merged_topic, 10)
     display = node.create_publisher(JointState, args.display_topic, 10)
     status = node.create_publisher(String, args.status_topic, 10)

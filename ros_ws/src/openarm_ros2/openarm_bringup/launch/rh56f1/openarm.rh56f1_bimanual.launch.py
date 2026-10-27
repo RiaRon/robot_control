@@ -29,6 +29,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from device_guard import require_no_controller_manager  # noqa: E402
 from rh56f1_description import (  # noqa: E402
     HAND_CONFIGURATIONS,
@@ -86,7 +87,7 @@ def _robot_nodes(
     )
     description_package = get_package_share_directory("openarm_description")
     wrapper = Path(description_package) / (
-        "urdf/robot/openarm_rh56f1_bimanual.urdf.xacro"
+        "urdf/rh56f1/openarm_rh56f1_bimanual.urdf.xacro"
     )
     source_urdf = Path(context.perform_substitution(canonical_urdf))
     selected_hands = context.perform_substitution(hand_configuration)
@@ -214,6 +215,7 @@ def generate_launch_description():
             FindPackageShare("openarm_bringup"),
             "config",
             "controllers",
+            "rh56f1",
             "openarm_rh56f1_fake_controllers.yaml",
         ]
     )

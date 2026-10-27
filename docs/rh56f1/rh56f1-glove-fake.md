@@ -47,7 +47,7 @@ rh56f1_glove_teleop.ros_adapter                   (/rh56f1_<side>/glove_adapter)
    ▼  /rh56f1_<side>/<side>_hand_trajectory_controller/joint_trajectory   (--execute일 때만)
 /rh56f1_<side>/controller_manager: <side>_hand_trajectory_controller → mock_components/GenericSystem
    ▼  joint_state_broadcaster → /rh56f1_<side>/joint_states (측정값)
-openarm_rh56f1_joint_state_merger → /joint_states, display_joint_states → RSP 하나 → /tf → RViz
+split_joint_state_merger → /joint_states, display_joint_states → RSP 하나 → /tf → RViz
 ```
 
 - `hand_bridge_node`, serial, 햅틱, 로거, 캘리브레이션 스크립트, `emergency_open`은 fake
@@ -67,7 +67,7 @@ openarm_rh56f1_joint_state_merger → /joint_states, display_joint_states → RS
 | `src/rh56f1_glove_teleop/ros_adapter.py` | rclpy 노드 |
 | `src/rh56f1_glove_teleop/config/glove_adapter.yaml` | 토픽, 이름 매핑, 엄지 정책, 시간 설정 |
 | `src/rh56f1_glove_teleop/synth_glove.py` | 합성 Nova2 JointState 발행기 |
-| `openarm_bringup/launch/rh56f1_glove_input.launch.py` | 손 하나의 retarget 노드 + adapter |
+| `openarm_bringup/launch/rh56f1/rh56f1_glove_input.launch.py` | 손 하나의 retarget 노드 + adapter |
 | `openarm_bringup/scripts/fake_trajectory_controller_prime.py` | fake JTC를 spawn 직후 한 번 현재 위치로 hold (9절) |
 
 ## 2. 연결 계약
@@ -226,8 +226,8 @@ RViz에서 오른손 네 손가락이 wave로 쥐었다 편다. 엄지는 `hold`
 다른 명령 토픽을 쓴다.
 
 ```bash
-python3 -m openarm_quest_teleop.ros_bridge
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime fake --execute
+python3 -m openarm_quest_teleop.ros_bridge --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime fake --execute
 ```
 
 ### 5.3 순서 3: 양손

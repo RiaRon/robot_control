@@ -33,7 +33,7 @@ ROS2_CONTROL_XACRO = (
     / "ros_ws/src/openarm_description/urdf/ros2_control/"
     "openarm.bimanual.ros2_control.xacro"
 )
-RH56F1_COMPONENT = repository_root() / "components/rh56f1.yaml"
+RH56F1_COMPONENT = repository_root() / "components/rh56f1/rh56f1.yaml"
 OPENARM_HARDWARE_SOURCE = (
     repository_root()
     / "ros_ws/src/openarm_ros2/openarm_hardware/src/openarm_simple_hardware.cpp"

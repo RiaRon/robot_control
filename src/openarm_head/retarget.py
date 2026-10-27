@@ -1,0 +1,344 @@
+# Derived from KUKU-Robot-Lab/motion_acq src/motion_acq/head/retarget.py at 01dc218 (Apache-2.0,
+# itself derived from HandUMI). Local changes: vendor_metadata/motion_acq/UPSTREAM.yaml.
+"""Meta Quest HMD orientation -> pan/tilt head targets (STEP 2).
+
+Pipeline (STEP2 setup doc): relative orientation -> deadband -> One Euro
+filter -> scale/sign -> joint window -> velocity/acceleration limit.
+
+Yaw and pitch come from the HMD forward axis in the gravity-aligned tracking
+frame (HandUMI convention: x forward, y left, z up), relative to the forward
+axis captured at anchor time. This is the pan/tilt-gimbal reading of
+``inv(R_anchor) @ R_now``: roll is ignored and yaw stays about the vertical
+axis even when the operator anchors while looking down at the table.
+
+Signs in the tracking frame: yaw > 0 turns left, pitch > 0 looks up.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, replace
+from enum import Enum
+
+import numpy as np
+
+from openarm_head.filters import Deadband, OneEuroFilter, RateLimiter
+
+__all__ = [
+    "AxisConfig", "Deadband", "HeadRetargeter", "HeadState", "HeadStep", "OneEuroFilter",
+    "RateLimiter", "RetargetConfig", "hmd_yaw_pitch_deg", "wrap_deg",
+]
+
+# Above this |pitch| the forward axis is close to vertical: its heading is
+# dominated by noise (about 11x at 85 deg), so yaw is held instead of updated.
+MAX_YAW_PITCH_DEG = 75.0
+
+
+def quat_to_matrix(q) -> np.ndarray:
+    """3x3 rotation of a quaternion [x, y, z, w] (normalized here)."""
+    x, y, z, w = np.asarray(q, dtype=np.float64) / np.linalg.norm(q)
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def wrap_deg(angle: float) -> float:
+    """Wrap an angle to [-180, 180)."""
+    return (float(angle) + 180.0) % 360.0 - 180.0
+
+
+def hmd_yaw_pitch_deg(pose7: np.ndarray) -> tuple[float | None, float] | None:
+    """Absolute (yaw, pitch) of the HMD forward axis.
+
+    Returns None for an unusable pose; yaw is None when |pitch| exceeds
+    MAX_YAW_PITCH_DEG and the heading is not trustworthy.
+    """
+    pose = np.asarray(pose7, dtype=np.float64).reshape(7)
+    quaternion = pose[3:7]
+    if not np.all(np.isfinite(quaternion)) or np.linalg.norm(quaternion) < 1e-6:
+        return None
+    forward = quat_to_matrix(quaternion)[:, 0]
+    horizontal = math.hypot(forward[0], forward[1])
+    pitch = math.degrees(math.atan2(forward[2], horizontal))
+    if abs(pitch) > MAX_YAW_PITCH_DEG:
+        return None, pitch
+    return math.degrees(math.atan2(forward[1], forward[0])), pitch
+
+
+@dataclass(frozen=True)
+class AxisConfig:
+    """One head joint in motor degrees (sim2real deg_to_tick convention)."""
+
+    home_deg: float
+    range_deg: float
+    sign: float = 1.0
+    scale: float = 1.0
+    # Optional asymmetric window, in operator terms: range_pos_deg toward the HMD
+    # positive side (pan left, tilt up), range_neg_deg toward the other (pan right,
+    # tilt down). Both default to range_deg. The encoder window follows the sign.
+    range_pos_deg: float | None = None
+    range_neg_deg: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.range_deg <= 0.0:
+            raise ValueError("range_deg must be positive.")
+        for value in (self.range_pos_deg, self.range_neg_deg):
+            if value is not None and value <= 0.0:
+                raise ValueError("range_pos_deg / range_neg_deg must be positive.")
+        if self.sign not in (-1.0, 1.0):
+            raise ValueError("sign must be +1 or -1.")
+        if self.scale <= 0.0:
+            raise ValueError("scale must be positive.")
+
+    @property
+    def pos_range_deg(self) -> float:
+        return self.range_deg if self.range_pos_deg is None else self.range_pos_deg
+
+    @property
+    def neg_range_deg(self) -> float:
+        return self.range_deg if self.range_neg_deg is None else self.range_neg_deg
+
+    @property
+    def lower_deg(self) -> float:
+        return self.home_deg - (self.pos_range_deg if self.sign < 0 else self.neg_range_deg)
+
+    @property
+    def upper_deg(self) -> float:
+        return self.home_deg + (self.neg_range_deg if self.sign < 0 else self.pos_range_deg)
+
+    def clamp(self, value: float) -> float:
+        return float(np.clip(value, self.lower_deg, self.upper_deg))
+
+
+@dataclass(frozen=True)
+class RetargetConfig:
+    pan: AxisConfig
+    tilt: AxisConfig
+    deadband_deg: float = 0.5
+    min_cutoff_hz: float = 1.0
+    beta: float = 0.05
+    d_cutoff_hz: float = 1.0
+    max_velocity_deg_s: float = 60.0
+    max_acceleration_deg_s2: float = 300.0
+    # A control cycle longer than this (a stalled loop) still integrates only
+    # this much time, so a stall never turns into one large step.
+    max_step_dt_s: float = 0.06
+    # Resume from a HOLD longer than this by re-anchoring at the current head
+    # and HMD pose (Quest reconnect, app restart, recenter while lost).
+    reanchor_after_hold_s: float = 0.5
+    # A frame-to-frame HMD jump larger than this is a tracking-origin change
+    # (Quest recenter), not head motion: hold and re-anchor.
+    max_hmd_jump_deg: float = 30.0
+    pan_enabled: bool = True
+    tilt_enabled: bool = True
+    # 10.12 user (option B): the camera pitch at tilt home, in HMD pitch terms (deg, < 0 = down;
+    # arm4090 home looks 18.9 deg down at the table). With a robot front the tilt then follows the
+    # operator's absolute pitch: looking level puts the camera level, looking 30 deg down puts it
+    # 30 deg down. None: relative to the pitch the front was taken with.
+    tilt_home_pitch_deg: float | None = None
+    # 10.12 user: with tilt_home_pitch_deg, the camera pitch below level is this many times the
+    # HMD's (above level stays 1:1). The first solo run looked at most 36 deg down while the
+    # table needs the camera ~73 deg down; 2.0 maps 36 -> 72.
+    tilt_down_gain: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not 1.0 <= self.tilt_down_gain <= 3.0:
+            raise ValueError(f"tilt_down_gain {self.tilt_down_gain} must be within [1, 3].")
+
+    def camera_pitch_deg(self, hmd_pitch_deg: float) -> float:
+        """Absolute mode: the camera pitch the HMD pitch asks for (down scaled by tilt_down_gain)."""
+        return hmd_pitch_deg * self.tilt_down_gain if hmd_pitch_deg < 0.0 else hmd_pitch_deg
+
+    def with_axes(self, axes: str) -> RetargetConfig:
+        """Restrict to 'pan', 'tilt' or 'both' (staged hardware tests)."""
+        if axes not in ("pan", "tilt", "both"):
+            raise ValueError(f"axes must be pan, tilt or both, not {axes!r}.")
+        return replace(
+            self,
+            pan_enabled=axes in ("pan", "both"),
+            tilt_enabled=axes in ("tilt", "both"),
+        )
+
+
+class HeadState(str, Enum):
+    IDLE = "idle"  # not anchored yet: never command
+    RUNNING = "running"
+    HOLD = "hold"  # HMD lost, unusable or jumped: keep the last command
+
+
+@dataclass(frozen=True)
+class HeadStep:
+    state: HeadState
+    rel_yaw_deg: float | None
+    rel_pitch_deg: float | None
+    filtered_yaw_deg: float | None
+    filtered_pitch_deg: float | None
+    target_pan_deg: float | None
+    target_tilt_deg: float | None
+    command_pan_deg: float | None
+    command_tilt_deg: float | None
+    reanchored: bool = False
+
+
+class _Axis:
+    def __init__(self, axis: AxisConfig, config: RetargetConfig, enabled: bool) -> None:
+        self.axis = axis
+        self.enabled = enabled
+        self.deadband = Deadband(config.deadband_deg)
+        self.filter = OneEuroFilter(config.min_cutoff_hz, config.beta, config.d_cutoff_hz)
+        self.limiter = RateLimiter(config.max_velocity_deg_s, config.max_acceleration_deg_s2)
+        self.base_deg = axis.home_deg
+        self.target_deg = axis.home_deg
+        self.filtered = 0.0
+
+    def anchor(self, head_deg: float, t_s: float, *, start_deg: float | None = None,
+               relative_deg: float = 0.0) -> None:
+        """``head_deg`` is the axis angle at relative 0; the command starts at ``start_deg``
+        (default ``head_deg``) and the filters at ``relative_deg`` (a front-relative start)."""
+        self.base_deg = self.axis.clamp(head_deg)
+        self.target_deg = self.base_deg
+        self.filtered = float(relative_deg)
+        self.deadband.reset(float(relative_deg))
+        self.filter.reset(float(relative_deg), t_s)
+        self.limiter.reset(self.base_deg if start_deg is None else self.axis.clamp(start_deg))
+
+    def step(self, relative_deg: float, t_s: float, dt: float) -> float:
+        self.filtered = self.filter(self.deadband(relative_deg), t_s)
+        if self.enabled:
+            raw = self.base_deg + self.axis.sign * self.axis.scale * self.filtered
+            self.target_deg = self.axis.clamp(raw)
+        else:
+            self.target_deg = self.base_deg
+        return self.limiter(self.target_deg, dt)
+
+
+class HeadRetargeter:
+    """Anchor-relative HMD yaw/pitch -> limited pan/tilt commands.
+
+    Yaw is unwrapped continuously (no flip at ±180 deg from the anchor) and is
+    held while the HMD looks near-vertically. HOLD keeps the last command; a
+    long HOLD or an HMD jump re-anchors so the head never snaps to a new origin.
+    """
+
+    def __init__(self, config: RetargetConfig) -> None:
+        self.config = config
+        self.state = HeadState.IDLE
+        self._anchor_yaw = 0.0
+        self._anchor_pitch = 0.0
+        self._yaw_unwrapped = 0.0
+        self._last_raw_yaw = 0.0
+        self._last_pitch = 0.0
+        self._last_t: float | None = None
+        self._hold_since: float | None = None
+        self.front: np.ndarray | None = None  # 10.11: device-frame front the anchor uses, if any
+        self._pan = _Axis(config.pan, config, config.pan_enabled)
+        self._tilt = _Axis(config.tilt, config, config.tilt_enabled)
+
+    @property
+    def command_deg(self) -> tuple[float, float]:
+        return self._pan.limiter.position, self._tilt.limiter.position
+
+    def anchor(
+        self, hmd_pose7: np.ndarray, head_deg: tuple[float, float], t_s: float,
+        *, front_pose7: np.ndarray | None = None,
+    ) -> bool:
+        """Capture R_hmd_anchor and R_head_anchor. False if the HMD pose is unusable.
+
+        With ``front_pose7`` (10.11: the robot's front the operator set, shared with the arms)
+        the head is at home when the HMD looks at the front: the angles are taken from the
+        front, and the command walks (rate limited) from ``head_deg`` to where the HMD looks.
+        With ``tilt_home_pitch_deg`` the tilt ignores the front's pitch and follows the HMD's
+        absolute pitch (home when the HMD looks that far down)."""
+        angles = hmd_yaw_pitch_deg(hmd_pose7)
+        if angles is None or angles[0] is None:
+            return False
+        yaw, pitch = angles
+        if front_pose7 is None:
+            self._anchor_yaw = self._yaw_unwrapped = self._last_raw_yaw = yaw
+            self._anchor_pitch = self._last_pitch = pitch
+            self._pan.anchor(head_deg[0], t_s)
+            self._tilt.anchor(head_deg[1], t_s)
+            self.front = None
+        else:
+            front = hmd_yaw_pitch_deg(front_pose7)
+            if front is None or front[0] is None:
+                return False
+            pitch_ref = front[1] if self.config.tilt_home_pitch_deg is None else self.config.tilt_home_pitch_deg
+            rel_yaw, rel_pitch = wrap_deg(yaw - front[0]), self._pitch_in(pitch, absolute=True) - pitch_ref
+            self._anchor_yaw, self._anchor_pitch = front[0], pitch_ref
+            self._yaw_unwrapped = front[0] + rel_yaw
+            self._last_raw_yaw, self._last_pitch = yaw, pitch
+            self._pan.anchor(self.config.pan.home_deg, t_s, start_deg=head_deg[0], relative_deg=rel_yaw)
+            self._tilt.anchor(self.config.tilt.home_deg, t_s, start_deg=head_deg[1], relative_deg=rel_pitch)
+            self.front = np.asarray(front_pose7, dtype=np.float64).copy()
+        self._last_t = t_s
+        self._hold_since = None
+        self.state = HeadState.RUNNING
+        return True
+
+    def _pitch_in(self, pitch: float, *, absolute: bool) -> float:
+        """The HMD pitch the tilt follows: down-scaled only in absolute mode (robot front + home pitch)."""
+        if absolute and self.config.tilt_home_pitch_deg is not None:
+            return self.config.camera_pitch_deg(pitch)
+        return pitch
+
+    def _hold(self, t_s: float) -> HeadStep:
+        if self._hold_since is None:
+            self._hold_since = t_s
+        self.state = HeadState.HOLD
+        self._pan.limiter.stop()
+        self._tilt.limiter.stop()
+        return HeadStep(
+            HeadState.HOLD, None, None, None, None,
+            self._pan.target_deg, self._tilt.target_deg, *self.command_deg,
+        )
+
+    def _reanchor(self, hmd_pose7: np.ndarray, t_s: float) -> HeadStep:
+        self.anchor(hmd_pose7, self.command_deg, t_s, front_pose7=self.front)
+        return HeadStep(
+            HeadState.RUNNING, 0.0, 0.0, 0.0, 0.0,
+            self._pan.target_deg, self._tilt.target_deg, *self.command_deg,
+            reanchored=True,
+        )
+
+    def step(self, hmd_pose7: np.ndarray | None, tracked: bool, t_s: float) -> HeadStep:
+        if self.state is HeadState.IDLE:
+            return HeadStep(HeadState.IDLE, *([None] * 8))
+        raw_dt = 0.0 if self._last_t is None else max(t_s - self._last_t, 0.0)
+        dt = min(raw_dt, self.config.max_step_dt_s)
+        self._last_t = t_s
+        angles = hmd_yaw_pitch_deg(hmd_pose7) if tracked and hmd_pose7 is not None else None
+        if angles is None:
+            return self._hold(t_s)
+        assert hmd_pose7 is not None
+        raw_yaw, pitch = angles
+        long_hold = (
+            self._hold_since is not None
+            and t_s - self._hold_since > self.config.reanchor_after_hold_s
+        )
+        jump = abs(pitch - self._last_pitch) > self.config.max_hmd_jump_deg or (
+            raw_yaw is not None
+            and abs(wrap_deg(raw_yaw - self._last_raw_yaw)) > self.config.max_hmd_jump_deg
+        )
+        if long_hold or jump:
+            if raw_yaw is None:
+                return self._hold(t_s)  # cannot anchor while looking vertically
+            return self._reanchor(hmd_pose7, t_s)
+        self._hold_since = None
+        self.state = HeadState.RUNNING
+        if raw_yaw is not None:
+            self._yaw_unwrapped += wrap_deg(raw_yaw - self._last_raw_yaw)
+            self._last_raw_yaw = raw_yaw
+        self._last_pitch = pitch
+        rel_yaw = self._yaw_unwrapped - self._anchor_yaw
+        rel_pitch = self._pitch_in(pitch, absolute=self.front is not None) - self._anchor_pitch
+        pan_cmd = self._pan.step(rel_yaw, t_s, dt)
+        tilt_cmd = self._tilt.step(rel_pitch, t_s, dt)
+        return HeadStep(
+            HeadState.RUNNING,
+            rel_yaw, rel_pitch, self._pan.filtered, self._tilt.filtered,
+            self._pan.target_deg, self._tilt.target_deg,
+            pan_cmd, tilt_cmd,
+        )

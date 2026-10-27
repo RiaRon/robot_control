@@ -12,7 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 KUKU_LAB = ROOT.parent
 LAUNCH_DIR = (
-    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch"
+    ROOT / "ros_ws/src/openarm_ros2/openarm_bringup/launch/rh56f1"
 )
 sys.path.insert(0, str(LAUNCH_DIR))
 
@@ -29,20 +29,20 @@ from rh56f1_description import (  # noqa: E402
 
 CANONICAL = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
 MANIFEST = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml"
-PROFILE = ROOT / "src/robot_control/profiles/openarm_rh56f1.yaml"
+PROFILE = ROOT / "src/robot_control/profiles/rh56f1/openarm_rh56f1.yaml"
 WRAPPER = (
     ROOT
-    / "ros_ws/src/openarm_description/urdf/robot/"
+    / "ros_ws/src/openarm_description/urdf/rh56f1/"
     "openarm_rh56f1_bimanual.urdf.xacro"
 )
 CONTROL_XACRO = (
     ROOT
-    / "ros_ws/src/openarm_description/urdf/ros2_control/"
+    / "ros_ws/src/openarm_description/urdf/rh56f1/"
     "openarm_rh56f1.bimanual.ros2_control.xacro"
 )
 CONTROLLERS = (
     ROOT
-    / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/"
+    / "ros_ws/src/openarm_ros2/openarm_bringup/config/controllers/rh56f1/"
     "openarm_rh56f1_fake_controllers.yaml"
 )
 

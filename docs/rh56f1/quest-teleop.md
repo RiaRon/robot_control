@@ -38,7 +38,7 @@ Quest 앱 (UDP JSON, port 5006)
 ```
 
 코드: `robot_control/src/openarm_quest_teleop/`. 설정:
-`robot_control/src/openarm_quest_teleop/config/quest_teleop.yaml`.
+`robot_control/src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml`.
 
 ## 조작 방식
 
@@ -103,7 +103,7 @@ Quest 앱 (UDP JSON, port 5006)
 
 ```bash
 cd ~/kuku_lab/robot_control
-PYTHONPATH=src python3 -m openarm_quest_teleop.monitor
+PYTHONPATH=src python3 -m openarm_quest_teleop.monitor --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
 ```
 
 출력: 좌우 컨트롤러 위치와 quaternion(`quest_world`, x y z w), grip/trigger/stick/버튼,
@@ -121,8 +121,8 @@ pose 유효 여부, PC 수신 시각과 경과 시간, 수신 빈도, malformed/
 확인하려면 다른 터미널에서 합성 입력을 보낸다:
 
 ```bash
-PYTHONPATH=src python3 -m openarm_quest_teleop.synth --scenario still --seconds 5
-PYTHONPATH=src python3 -m openarm_quest_teleop.synth --replay /tmp/quest.jsonl
+PYTHONPATH=src python3 -m openarm_quest_teleop.synth --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --scenario still --seconds 5
+PYTHONPATH=src python3 -m openarm_quest_teleop.synth --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --replay /tmp/quest.jsonl
 ```
 
 monitor를 끝낸 뒤 다음 단계로 간다 (UDP 5006은 한 프로세스만 받는다).
@@ -137,7 +137,7 @@ monitor를 끝낸 뒤 다음 단계로 간다 (UDP 5006은 한 프로세스만 �
 cd ~/kuku_lab/robot_control
 tools/quest_teleop_fake_container.sh
 # (컨테이너 안)
-python3 -m openarm_quest_teleop.ros_bridge
+python3 -m openarm_quest_teleop.ros_bridge --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
 ```
 
 ```bash
@@ -177,9 +177,9 @@ ros2 action send_goal /right_joint_trajectory_controller/follow_joint_trajectory
   [0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0], time_from_start: {sec: 2}}]}}"
 
 # 터미널 C: 먼저 dry run (명령을 보내지 않고 상태만 보여 준다)
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime fake
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime fake
 # 이상 없으면 Ctrl-C 후 실행
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime fake --execute
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime fake --execute
 
 # 터미널 D: 상태와 palm 위치
 ros2 topic echo /quest_teleop/right/status
@@ -194,7 +194,7 @@ position / workspace limit)이 나온다. 왼팔은 `--arm left`다 (왼쪽 컨�
 Quest 없이 확인하려면 터미널 D에서 합성 입력을 보낸다 (bridge가 받는다):
 
 ```bash
-python3 -m openarm_quest_teleop.synth --scenario axes
+python3 -m openarm_quest_teleop.synth --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --scenario axes
 ```
 
 자동 회귀 (합성 입력, 사람 개입 없음):
@@ -241,11 +241,11 @@ bringup 자체의 preflight, launch, read-only 확인, 정지 방법은
 6. bridge를 띄우고 4단계처럼 `/quest/right/pose`가 들어오는지 본다:
    ```bash
    cd ~/kuku_lab/robot_control && export PYTHONPATH="$PWD/src:$PYTHONPATH"
-   python3 -m openarm_quest_teleop.ros_bridge
+   python3 -m openarm_quest_teleop.ros_bridge --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
    ```
 7. **dry run**으로 real에 붙여 본다. 아무것도 발행하지 않는다:
    ```bash
-   python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime real
+   python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime real
    ros2 topic echo /quest_teleop/right/status
    ```
    grip을 누르고 손을 움직여 `state: engaged`, `target_xyz`가 손을 움직인 방향으로
@@ -258,7 +258,7 @@ real 실행은 기본 비활성이다. 플래그 **두 개가 모두** 있어야
 `--execute`만 주면 `this is real hardware … refused`로 종료한다.
 
 ```bash
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime real \
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime real \
   --execute --confirm-real-hardware
 ```
 
@@ -284,7 +284,7 @@ teleop은 종료할 때 팔을 home/zero로 보내지 않는다.
 
 ## 설정 요약
 
-`config/quest_teleop.yaml`을 복사해 고친 뒤 `--config <파일>`로 넘긴다.
+`config/rh56f1/quest_teleop.yaml`을 복사해 고친 뒤 `--config <파일>`로 넘긴다.
 
 | 키 | 기본 | 뜻 |
 |---|---|---|

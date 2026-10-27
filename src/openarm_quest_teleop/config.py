@@ -1,6 +1,6 @@
 """Configuration, and binding one arm to the description that is running.
 
-The profile (``profiles/openarm_rh56f1.yaml``) stays the only place joint
+The robot profile (``profiles/<hand>/<robot>.yaml``) stays the only place joint
 names, their order, signs and limits are written. Which naming the running
 description uses is read off the description itself: the fake bringup names
 the arm joints canonically (``r_aj_1``), the real one by source
@@ -24,7 +24,10 @@ from .ik import IkSettings
 from .relative import RelativeTargetMapper
 from .teleop import ArmTeleop, TeleopSettings
 
-DEFAULT_CONFIG = Path(__file__).resolve().parent / "config" / "quest_teleop.yaml"
+_CONFIG_DIR = Path(__file__).resolve().parent / "config"
+LEAP_CONFIG = _CONFIG_DIR / "leap_hand" / "quest_teleop_leap.yaml"
+RH56F1_CONFIG = _CONFIG_DIR / "rh56f1" / "quest_teleop.yaml"
+DEFAULT_CONFIG = LEAP_CONFIG
 #: The only hardware plugin a run without the real-hardware confirmation may
 #: command.
 FAKE_PLUGIN = "mock_components/GenericSystem"

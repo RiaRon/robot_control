@@ -58,7 +58,7 @@ import tf2_ros
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 sys.path.insert(
-    0, str(Path(get_package_share_directory("openarm_bringup")) / "launch")
+    0, str(Path(get_package_share_directory("openarm_bringup")) / "launch" / "rh56f1")
 )
 from rh56f1_description import FAKE_HAND_CONTROLLERS  # noqa: E402
 

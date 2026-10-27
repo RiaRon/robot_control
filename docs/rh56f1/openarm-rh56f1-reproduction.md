@@ -8,7 +8,7 @@
 
 robot_control은 canonical 모델을 **형제 디렉터리의 `urdf` 저장소**에서 읽는다.
 
-- profile `src/robot_control/profiles/openarm_rh56f1.yaml`이
+- profile `src/robot_control/profiles/rh56f1/openarm_rh56f1.yaml`이
   `../../../../urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml`을 가리키고, sha256으로
   검사한다.
 - launch는 `urdf/generated/rl/openarm_rh56f1_bi_rl.urdf`를 찾는다.
@@ -25,7 +25,7 @@ robot_control은 canonical 모델을 **형제 디렉터리의 `urdf` 저장소**
 - `urdf` 저장소의 다른 미커밋 파일(Stage 1 시각화 도구 `display_openarm_rh56f1.launch.py`,
   `rviz/`, `tools/openarm_rh56f1_visualization.py`)은 이 PC에만 있다. robot_control은 이
   파일들을 쓰지 않는다. RViz 설정은 robot_control 안에 복사해 두었다
-  (`openarm_bringup/config/rviz/openarm_rh56f1_split.rviz`).
+  (`openarm_bringup/config/rviz/rh56f1/openarm_rh56f1_split.rviz`).
 - canonical URDF의 메시 경로는 원래 생성 PC의 `file:///home/user/rl_ws/urdf/...`로
   적혀 있다. launch(`rh56f1_description.build_canonical_variant`)가 실행할 때 이 경로를
   `urdf` 체크아웃 위치로 바꾸고, 원본 파일은 수정하지 않는다.
@@ -115,9 +115,9 @@ ros2 action send_goal /right_joint_trajectory_controller/follow_joint_trajectory
   [r_aj_1, r_aj_2, r_aj_3, r_aj_4, r_aj_5, r_aj_6, r_aj_7], points: [{positions:
   [0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0], time_from_start: {sec: 2}}]}}"
 
-python3 -m openarm_quest_teleop.ros_bridge
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime fake --execute
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime fake --execute --orientation-mode relative
+python3 -m openarm_quest_teleop.ros_bridge --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime fake --execute
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime fake --execute --orientation-mode relative
 ```
 
 grip을 누르는 동안 RViz의 오른팔이 컨트롤러를 따라온다. 2026-10-03에 사용자가 이 경로로

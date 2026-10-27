@@ -20,8 +20,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 KUKU_LAB = ROOT.parent
 BRINGUP = ROOT / "ros_ws/src/openarm_ros2/openarm_bringup"
-LAUNCH_DIR = BRINGUP / "launch"
+LAUNCH_DIR = BRINGUP / "launch/rh56f1"
 sys.path.insert(0, str(LAUNCH_DIR))
+sys.path.insert(1, str(LAUNCH_DIR.parent))  # device_guard, split_common
 
 import device_guard  # noqa: E402
 import rh56f1_split_description as split  # noqa: E402
@@ -29,9 +30,9 @@ import rh56f1_split_description as split  # noqa: E402
 CANONICAL = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl.urdf"
 MANIFEST = KUKU_LAB / "urdf/generated/rl/openarm_rh56f1_bi_rl_manifest.yaml"
 DESCRIPTION_SRC = ROOT / "ros_ws/src/openarm_description"
-FAKE_WRAPPER = DESCRIPTION_SRC / "urdf/robot/openarm_rh56f1_bimanual.urdf.xacro"
-REAL_WRAPPER = DESCRIPTION_SRC / "urdf/robot/openarm_rh56f1_bimanual_real.urdf.xacro"
-REAL_CONTROLLERS = BRINGUP / "config/controllers/openarm_rh56f1_real_controllers.yaml"
+FAKE_WRAPPER = DESCRIPTION_SRC / "urdf/rh56f1/openarm_rh56f1_bimanual.urdf.xacro"
+REAL_WRAPPER = DESCRIPTION_SRC / "urdf/rh56f1/openarm_rh56f1_bimanual_real.urdf.xacro"
+REAL_CONTROLLERS = BRINGUP / "config/controllers/rh56f1/openarm_rh56f1_real_controllers.yaml"
 ORDER = yaml.safe_load(MANIFEST.read_text())["control_joint_order"]
 SOURCE = {c: s for s, c in yaml.safe_load(MANIFEST.read_text())["source_to_canonical_joints"].items()}
 MIMIC = [f"{p}_hj_{f}" for p in "rl" for f in ("thumb_3", "thumb_4", "index_2", "middle_2",
@@ -39,9 +40,9 @@ MIMIC = [f"{p}_hj_{f}" for p in "rl" for f in ("thumb_3", "thumb_4", "index_2", 
 PALMS = {"r_hl_palm_sensor", "l_hl_palm_sensor"}
 
 spec = importlib.util.spec_from_file_location(
-    "openarm_rh56f1_joint_state_merger", BRINGUP / "scripts/openarm_rh56f1_joint_state_merger.py")
+    "split_joint_state_merger", BRINGUP / "scripts/split_joint_state_merger.py")
 merger = importlib.util.module_from_spec(spec)
-sys.modules["openarm_rh56f1_joint_state_merger"] = merger
+sys.modules["split_joint_state_merger"] = merger
 spec.loader.exec_module(merger)
 
 
@@ -289,7 +290,7 @@ def test_device_lock_is_exclusive_across_processes(tmp_path, monkeypatch):
     code = (
         "import sys; sys.path.insert(0, %r); import device_guard\n"
         "try:\n    device_guard.hold_device_lock('can_can0')\nexcept device_guard.OwnershipError:\n"
-        "    sys.exit(3)\n" % str(LAUNCH_DIR))
+        "    sys.exit(3)\n" % str(LAUNCH_DIR.parent))
     env = {**os.environ, device_guard.LOCK_DIR_ENV: str(tmp_path)}
     assert subprocess.run([sys.executable, "-c", code], env=env).returncode == 3
     device_guard.hold_device_lock("can_can1")  # another interface is free
@@ -431,7 +432,7 @@ def test_fake_trajectory_controllers_are_primed_after_spawning(tmp_path, monkeyp
 
 
 def test_primer_refuses_anything_but_generic_system():
-    text = (LAUNCH_DIR.parent / "scripts/fake_trajectory_controller_prime.py").read_text()
+    text = (BRINGUP / "scripts/fake_trajectory_controller_prime.py").read_text()
     assert 'FAKE_PLUGIN = "mock_components/GenericSystem"' in text
     assert "if plugins != {FAKE_PLUGIN}:" in text
     assert "positions=positions" in text and "measured.feedback.positions" in text
@@ -441,7 +442,7 @@ def test_model_launch_is_the_only_tf_publisher_and_reads_the_display_topic():
     nodes = _launch_nodes("openarm_rh56f1_model.launch.py")
     infos = [_node_info(n) for n in nodes]
     assert [i[0] for i in infos] == ["robot_state_publisher",
-                                     "openarm_rh56f1_joint_state_merger.py"]
+                                     "split_joint_state_merger.py"]
     assert ("joint_states", split.DISPLAY_STATE_TOPIC) in infos[0][3]
     arguments = infos[1][2]
     sources = json.loads(arguments[arguments.index("--sources") + 1])

@@ -20,8 +20,9 @@ robotctl = "robot_control.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-robot_control = ["profiles/*.yaml"]
-openarm_quest_teleop = ["config/*.yaml"]
+robot_control = ["profiles/*.yaml", "profiles/*/*.yaml"]
+openarm_quest_teleop = ["config/*/*.yaml"]
+openarm_quest_view = ["web/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

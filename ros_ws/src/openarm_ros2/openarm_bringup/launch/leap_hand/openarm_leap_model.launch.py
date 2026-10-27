@@ -10,7 +10,7 @@
 
 No hardware, no controller manager, no command; the only TF publisher of the model.
 It reads each device's own joint states through the merger
-(openarm_rh56f1_joint_state_merger.py, hand-agnostic):
+(split_joint_state_merger.py, hand-agnostic):
 
     /openarm/joint_states      arms (14)        ─┐
     /leap_right/joint_states   right hand (16)  ─┼─▶ /joint_states (measured)
@@ -32,6 +32,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
 from leap_split_description import (  # noqa: E402
     DISPLAY_STATE_TOPIC,
     MERGED_STATE_TOPIC,
@@ -67,21 +68,21 @@ def _setup(context: LaunchContext):
         ),
         Node(
             package="openarm_bringup",
-            executable="openarm_rh56f1_joint_state_merger.py",
+            executable="split_joint_state_merger.py",
             name="openarm_leap_joint_state_merger",
             output="screen",
             arguments=merger_arguments,
         ),
     ]
     if text("use_rviz").lower() == "true":
-        # The RH56F1 split config is hand-agnostic: fixed frame body_root, /robot_description.
+        # Fixed frame body_root, /robot_description.
         nodes.append(Node(
             package="rviz2",
             executable="rviz2",
             name="rviz2",
             output="log",
             arguments=["-d", str(Path(get_package_share_directory("openarm_bringup"))
-                                 / "config/rviz/openarm_rh56f1_split.rviz")],
+                                 / "config/rviz/leap_hand/openarm_leap_split.rviz")],
         ))
     return nodes
 

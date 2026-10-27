@@ -9,9 +9,9 @@ asset:
   # (urdf assemblies/openarm_modular_dual_leap.xacro) until the LEAP adapter
   # is measured; regenerating the asset changes manifest_sha256.
   id: openarm_leap_bi_rl
-  manifest: ../../../../urdf/generated/rl/openarm_leap_bi_rl_manifest.yaml
+  manifest: ../../../../../urdf/generated/rl/openarm_leap_bi_rl_manifest.yaml
   manifest_sha256: ebb7fbca23879829fc9f1b4e4bcb8f6ef5c9da1680434720a3a3f98908ada690
-  urdf: ../../../../urdf/generated/rl/openarm_leap_bi_rl.urdf
+  urdf: ../../../../../urdf/generated/rl/openarm_leap_bi_rl.urdf
 ros:
   humble:
     command_rate_hz: 100

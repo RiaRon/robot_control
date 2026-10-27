@@ -87,7 +87,7 @@ controller, so `parked` and `inactive` behave exactly as before.
 The canonical <-> fake controller mapping is the identity: the four fake
 controllers' joints, concatenated right arm, right hand, left arm, left hand,
 equal the manifest `control_joint_order` and the profile
-`profiles/openarm_rh56f1.yaml` groups. The real bringup uses the manifest
+`profiles/rh56f1/openarm_rh56f1.yaml` groups. The real bringup uses the manifest
 source names and `rh56f1_{side}_hand_controller` instead.
 
 Hand targets in this mode are fake-only test values in URDF radians. They are

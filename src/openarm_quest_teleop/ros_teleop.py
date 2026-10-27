@@ -73,7 +73,7 @@ def _stamp_ns(message) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Quest controller -> OpenArm arm teleoperation (one arm)")
-    parser.add_argument("--config", help="quest_teleop.yaml (default: the packaged one)")
+    parser.add_argument("--config", help="teleop config (default: config/leap_hand/quest_teleop_leap.yaml; RH56F1: config/rh56f1/quest_teleop.yaml)")
     parser.add_argument("--arm", default="right", help="arm from the config (right | left)")
     parser.add_argument("--runtime", choices=RUNTIMES, default="fake",
                         help="which bringup's controller names to use")

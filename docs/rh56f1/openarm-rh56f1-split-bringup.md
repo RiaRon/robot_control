@@ -53,7 +53,7 @@ OpenArm-Tesollo bringup(`KUKU-Robot-Lab/robot_control` humble @ `a8328a1`)을 �
 
 ```text
 /openarm/joint_states       팔 14  ─┐
-/rh56f1_right/joint_states  손 6   ─┼─▶ openarm_rh56f1_joint_state_merger
+/rh56f1_right/joint_states  손 6   ─┼─▶ split_joint_state_merger
 /rh56f1_left/joint_states   손 6   ─┘     ├─▶ /joint_states                          (측정값만)
                                           ├─▶ /openarm_rh56f1/display_joint_states   ─▶ robot_state_publisher ─▶ /tf, /tf_static
                                           └─▶ /openarm_rh56f1/joint_state_sources    (장치별 상태, JSON)
@@ -181,9 +181,9 @@ ros2 action send_goal /right_joint_trajectory_controller/follow_joint_trajectory
   [r_aj_1, r_aj_2, r_aj_3, r_aj_4, r_aj_5, r_aj_6, r_aj_7], points: [{positions:
   [0.3, 0.15, 0.0, 1.2, 0.0, 0.0, 0.0], time_from_start: {sec: 2}}]}}"
 
-python3 -m openarm_quest_teleop.ros_bridge
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime fake --execute
-python3 -m openarm_quest_teleop.ros_teleop --arm left  --runtime fake --execute   # 왼팔
+python3 -m openarm_quest_teleop.ros_bridge --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime fake --execute
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm left  --runtime fake --execute   # 왼팔
 ```
 
 이전 단일 CM fake(`openarm.rh56f1_bimanual.launch.py`)에 붙이려면
@@ -252,8 +252,8 @@ ros2 control set_hardware_component_state -c /controller_manager openarm_rh56f1_
 ros2 control switch_controllers -c /controller_manager --activate rh56f1_right_arm_controller
 
 # 4) Quest: 먼저 dry run, 그다음 두 플래그를 모두 주고 실행
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime real
-python3 -m openarm_quest_teleop.ros_teleop --arm right --runtime real --execute --confirm-real-hardware
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime real
+python3 -m openarm_quest_teleop.ros_teleop --config src/openarm_quest_teleop/config/rh56f1/quest_teleop.yaml --arm right --runtime real --execute --confirm-real-hardware
 ```
 
 startup 정책은 통합 real bringup과 같다. `real_bringup_safety.yaml`과 `OpenArmHW`는
@@ -292,7 +292,7 @@ startup 정책은 통합 real bringup과 같다. `real_bringup_safety.yaml`과 `
   (0.1°, `rh56f1_interfaces`)다.
 - 2026-10-02 README의 "실기 손은 EtherCAT(sim2real `rh56f1_ecat_node`)로 바꿨다"는 결정
   기록.
-- 로컬 미추적 파일과 같은 이름의 `profiles/openarm_rh56f1.yaml`,
+- 로컬 미추적 파일과 같은 이름의 `profiles/rh56f1/openarm_rh56f1.yaml`,
   `tests/test_profile_rh56f1.py`. 내용이 다르다. upstream profile은 hdgp asset과 다른
   manifest hash, 팔 group `openarm_<side>_arm`과 tip `*_hl_base`를 쓴다.
 
