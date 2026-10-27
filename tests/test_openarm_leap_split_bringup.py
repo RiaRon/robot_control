@@ -97,3 +97,101 @@ def test_merger_sources_and_topics_do_not_loop():
     assert not {s["id"] for s in sources} - {"openarm", "leap_right", "leap_left", "head"}
     assert not outputs & {s["topic"] for s in sources}
     assert leap.ARM_DESCRIPTION_TOPIC != "/robot_description"  # the model's publisher owns that
+
+
+# ------------------------------------------------------------- real hand (ROBOTIS plugin)
+def _real_settings(**sides):
+    settings = leap.load_real_settings()
+    for side, port in sides.items():
+        settings[side] = {"port": port}
+    return settings
+
+
+@pytest.mark.parametrize("side", leap.SIDES)
+def test_real_hand_motor_ids_follow_the_manifest(side):
+    motors = leap.motor_joints(side, MANIFEST)
+    mapping = yaml.safe_load(MANIFEST.read_text())["source_to_canonical_joints"]
+    assert [i for i, _ in motors] == list(range(16))
+    assert all(mapping[f"leap_{side}_{i}"] == joint for i, joint in motors)
+    assert dict(motors)[1] == f"{side[0]}_hj_index_1"  # LEAP joint 1: index MCP flexion
+
+
+@pytest.mark.parametrize("side", leap.SIDES)
+def test_real_hand_description_is_one_robotis_block(side):
+    description = leap.real_hand_description(side, Path(CANONICAL), MANIFEST, _real_settings(**{side: "/dev/x"}))
+    blocks = _blocks(description)
+    assert list(blocks) == [f"leap_{side}_hand_real"]
+    block = blocks[f"leap_{side}_hand_real"]
+    assert block["plugin"] == leap.REAL_PLUGIN
+    assert block["joints"] == [j for _, j in leap.motor_joints(side, MANIFEST)]
+    assert sorted(block["joints"]) == sorted(leap.device_joints(MANIFEST)[side])
+    xml = ET.fromstring(description).find("ros2_control")
+    params = {p.get("name"): p.text for p in xml.findall("hardware/param")}
+    assert params["port_name"] == "/dev/x" and params["disable_torque_at_init"] == "true"
+    assert params["number_of_joints"] == params["number_of_transmissions"] == "16"
+    matrix = [int(v) for v in params["transmission_to_joint_matrix"].split(",")]
+    assert matrix == [int(r == c) for r in range(16) for c in range(16)]
+    gpios = xml.findall("gpio")
+    assert [int(g.find("param[@name='ID']").text) for g in gpios] == list(range(16))
+    first = {p.get("name"): p.text for p in gpios[0].findall("param")}
+    assert first["type"] == "dxl" and first["Operating Mode"] == "5" and first["Current Limit"] == "350"
+
+
+def test_real_hand_refuses_without_a_port_and_starts_inactive():
+    with pytest.raises(ValueError, match="right.port is not set"):
+        leap.real_hand_description("right", Path(CANONICAL), MANIFEST, _real_settings(right=""))
+    description = leap.real_hand_description("right", Path(CANONICAL), MANIFEST, _real_settings(right="/dev/x"))
+    params = leap.real_hand_controllers("right", MANIFEST, description, start_inactive=True)
+    manager = params["/**/controller_manager"]["ros__parameters"]
+    assert manager["hardware_components_initial_state"] == {"inactive": ["leap_right_hand_real"]}
+    assert params["/**/right_hand_trajectory_controller"]["ros__parameters"]["joints"] \
+        == leap.device_joints(MANIFEST)["right"]
+
+
+def test_motor_id_swap_exchanges_the_mcp_pairs():
+    plain = dict(leap.motor_joints("right", MANIFEST))
+    swapped = dict(leap.motor_joints("right", MANIFEST, {0: 1, 4: 5, 8: 9}))
+    assert swapped[0] == plain[1] == "r_hj_index_1" and swapped[1] == plain[0]
+    assert all(swapped[i] == plain[i] for i in range(16) if i not in (0, 1, 4, 5, 8, 9))
+    with pytest.raises(ValueError, match="no such motor"):
+        leap.motor_joints("right", MANIFEST, {0: 16})
+
+
+# ---------------------------------------------------------------- real arms (OpenArmHW)
+def _arm_settings(**cans):
+    settings = yaml.safe_load(leap.REAL_ARM_SETTINGS.read_text())
+    for side, can in cans.items():
+        settings[side] = {"can_interface": can}
+    return settings
+
+
+def test_real_arms_are_one_openarmhw_block_per_enabled_arm_with_source_names():
+    description = leap.real_arm_description(Path(CANONICAL), MANIFEST, _arm_settings(right="can0"))
+    blocks = _blocks(description)
+    assert list(blocks) == ["openarm_leap_right_arm"]
+    assert blocks["openarm_leap_right_arm"]["plugin"] == leap.REAL_ARM_PLUGIN
+    assert blocks["openarm_leap_right_arm"]["joints"] == [f"openarm_right_joint{i}" for i in range(1, 8)]
+    root = ET.fromstring(description)
+    params = {p.get("name"): p.text for p in root.find("ros2_control/hardware").findall("param")}
+    assert params["can_interface"] == "can0" and params["arm_prefix"] == "right_"
+    assert params["auto_return_to_zero"] == "false" and params["verify_state_before_enable"] == "true"
+    names = {j.get("name") for j in root.findall("joint")}
+    assert "openarm_left_joint1" in names and "r_aj_1" not in names and "r_hj_index_1" in names
+    with pytest.raises(ValueError, match="no arm enabled"):
+        leap.real_arm_description(Path(CANONICAL), MANIFEST, _arm_settings(right="", left=""))
+
+
+def test_real_arm_controllers_start_inactive_and_states_use_source_names():
+    settings = _arm_settings(right="can0", left="can1")
+    description = leap.real_arm_description(Path(CANONICAL), MANIFEST, settings)
+    params = leap.real_arm_controllers(description, settings)
+    manager = params["/**/controller_manager"]["ros__parameters"]
+    assert manager["update_rate"] == 750
+    assert manager["hardware_components_initial_state"]["inactive"] == [
+        "openarm_leap_right_arm", "openarm_leap_left_arm"]
+    left = params["/**/left_joint_trajectory_controller"]["ros__parameters"]
+    assert left["joints"] == [f"openarm_left_joint{i}" for i in range(1, 8)]
+    arms = leap.state_sources(MANIFEST, "real")[0]["joints"]
+    assert sorted(arms) == sorted(f"openarm_{s}_joint{i}" for s in leap.SIDES for i in range(1, 8))
+    model = ET.fromstring(leap.model_description(Path(CANONICAL), MANIFEST, "real"))
+    assert {j.get("name") for j in model.findall("joint")} >= set(arms)

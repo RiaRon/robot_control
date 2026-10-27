@@ -1,0 +1,35 @@
+# LEAP Hand on real Dynamixels: ROBOTIS dynamixel_hardware_interface (ros2_control).
+# Read by launch/leap_hand/leap_split_description.py (leap_hand.launch.py runtime:=real).
+#
+# Motor ID n drives the canonical joint the urdf manifest names for
+# leap_<side>_<n> (source_to_canonical_joints), IDs 0..15 on each hand's own bus.
+# Position: the plugin's XC330 model maps tick 2048 to 0 rad, which is the LEAP
+# flat pose (LEAP API: sim = motor - pi), so joint values are canonical radians.
+#
+# ★ Unmeasured on this robot: ports (U2D2 by-id), baud (LEAP default 4 Mbps).
+#   Gains and current limit are the friend's cup-grasp tuning (jimin-kr/leap_hand).
+
+right:
+  port: ""          # /dev/serial/by-id/usb-FTDI_..._<serial>-if00-port0   ★
+left:
+  port: ""          # ★
+baud_rate: 4000000
+error_timeout_ms: 500
+
+# ★ Check on the real hand before the first activation (move one motor, watch RViz).
+# The manifest follows the LEAP URDF: ID 0/4/8 = MCP side (spread), 1/5/9 = MCP
+# flexion. The friend's left hand measured the opposite (ID 0 bends, 1 holds
+# neutral). If ours does too: motor_id_swap: {0: 1, 4: 5, 8: 9}
+motor_id_swap: {}
+
+# Written to every motor at init (control table names of the XC330 model file).
+motor:
+  Operating Mode: 5          # current-based position
+  Position P Gain: 600
+  Position D Gain: 200
+  Current Limit: 350         # raw = mA on XC330-M288
+  Return Delay Time: 0
+
+# The hardware component starts inactive (torque off, nothing commanded) unless
+# the launch asks otherwise; activate it by hand after checking joint states.
+start_inactive: true

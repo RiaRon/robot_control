@@ -1,0 +1,22 @@
+# OpenArm arms on real motors (openarm_hardware/OpenArmHW over CAN-FD) for the
+# OpenArm + LEAP split bringup: openarm_leap_arms.launch.py runtime:=real.
+# An arm with an empty can_interface is left out (its controller too).
+# ★ Interfaces are this PC's / the robot PC's CAN devices: not set here (no CAN on cbj).
+
+right:
+  can_interface: ""   # e.g. can0   ★
+left:
+  can_interface: ""   # e.g. can1   ★
+can_fd: true
+update_rate: 750      # Hz, as the stock OpenArm real bimanual bringup
+
+# Same startup policy as the RH56F1 real bringup (openarm_description
+# config/rh56f1/real_bringup_safety.yaml, arm section).
+safety:
+  auto_return_to_zero: false            # never move on activation
+  verify_state_before_enable: true      # every motor must answer a disable probe first
+  min_inactive_sec_before_activate: 2.0 # explicit activation, not right after configure
+  state_stale_timeout_sec: 0.25
+
+# Components start inactive (motors not enabled); activate by hand (docs/leap_hand).
+start_inactive: true

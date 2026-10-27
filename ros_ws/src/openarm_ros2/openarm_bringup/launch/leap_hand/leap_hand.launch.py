@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""One LEAP Hand under its own controller manager, /leap_<side>/controller_manager (fake).
+"""One LEAP Hand under its own controller manager, /leap_<side>/controller_manager.
 
 Like rh56f1_hand.launch.py: its own namespace, controller manager,
 joint_state_broadcaster (``/leap_<side>/joint_states``) and
@@ -16,8 +16,14 @@ publisher (openarm_leap_model.launch.py) draws the hand from these joint states.
 
     ros2 launch openarm_bringup leap_hand.launch.py side:=right
 
-runtime:=fake only: mock_components/GenericSystem. The real hand (Dynamixel, via
-ros2_control) is not connected yet.
+runtime:=fake: mock_components/GenericSystem.
+runtime:=real: the ROBOTIS Dynamixel plugin (ros-jazzy-dynamixel-hardware-interface) on
+the hand's U2D2, settings in config/leap_hand/leap_hand_real.yaml. Needs
+i_understand_this_moves_real_hardware:=true; the component starts inactive (torque
+off) and the trajectory controller loaded but inactive, so launching moves nothing.
+
+    ros2 launch openarm_bringup leap_hand.launch.py side:=right runtime:=real \
+        port:=/dev/serial/by-id/... i_understand_this_moves_real_hardware:=true
 """
 
 from pathlib import Path
@@ -44,7 +50,10 @@ from leap_split_description import (  # noqa: E402
     description_nodes,
     fake_hand_controllers,
     fake_hand_description,
+    load_real_settings,
     prime_fake_trajectory_controllers,
+    real_hand_controllers,
+    real_hand_description,
 )
 
 
@@ -53,8 +62,10 @@ def _setup(context: LaunchContext):
     side = text("side")
     if side not in SIDES:
         raise ValueError(f"side must be one of {SIDES}")
-    if text("runtime") != "fake":
-        raise RuntimeError("leap_hand.launch.py has no real hand backend yet; only runtime:=fake")
+    real = text("runtime") == "real"
+    if real and text("i_understand_this_moves_real_hardware").lower() != "true":
+        raise RuntimeError("runtime:=real drives the LEAP motors: pass "
+                           "i_understand_this_moves_real_hardware:=true")
     namespace = HAND_NAMESPACE[side]
     manager = controller_manager(namespace)
     if text("check_ownership").lower() == "true":
@@ -64,11 +75,21 @@ def _setup(context: LaunchContext):
 
     canonical_urdf = Path(text("canonical_urdf"))
     manifest = Path(text("manifest")) if text("manifest") else default_manifest_for(canonical_urdf)
-    description = fake_hand_description(side, canonical_urdf, manifest)
+    if real:
+        settings = load_real_settings(text("real_config") or None)
+        if text("port"):
+            settings.setdefault(side, {})["port"] = text("port")
+        start_inactive = bool(settings.get("start_inactive", True))
+        description = real_hand_description(side, canonical_urdf, manifest, settings)
+        controllers = real_hand_controllers(side, manifest, description, start_inactive)
+        hold_device_lock("serial_" + Path(settings[side]["port"]).name)
+    else:
+        description = fake_hand_description(side, canonical_urdf, manifest)
+        controllers = fake_hand_controllers(side, manifest, description)
     with tempfile.NamedTemporaryFile(
         mode="w", prefix=f"leap_{side}_hand_controllers_", suffix=".yaml", delete=False
     ) as handle:
-        yaml.safe_dump(fake_hand_controllers(side, manifest, description), handle, sort_keys=False)
+        yaml.safe_dump(controllers, handle, sort_keys=False)
         controllers_file = handle.name
 
     nodes = [RegisterEventHandler(OnShutdown(
@@ -76,19 +97,29 @@ def _setup(context: LaunchContext):
     nodes += description_nodes(description, namespace, f"/{namespace}/robot_description",
                                {"parameters": [controllers_file]})
     for name in ("joint_state_broadcaster", FAKE_HAND_CONTROLLERS[side]):
+        # Real hand starting inactive: the trajectory controller is loaded but cannot claim
+        # commands yet; activate the component, then the controller (docs/leap_hand).
+        inactive = ["--inactive"] if real and start_inactive and name != "joint_state_broadcaster" else []
         nodes.append(Node(
             package="controller_manager",
             executable="spawner",
-            arguments=[name, "--controller-manager", manager],
+            arguments=[name, "--controller-manager", manager, *inactive],
         ))
-    nodes.append(prime_fake_trajectory_controllers(nodes[-1], manager, [FAKE_HAND_CONTROLLERS[side]]))
+    if not real:
+        nodes.append(prime_fake_trajectory_controllers(nodes[-1], manager, [FAKE_HAND_CONTROLLERS[side]]))
     return nodes
 
 
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("side", choices=list(SIDES)),
-        DeclareLaunchArgument("runtime", default_value="fake", choices=["fake"]),
+        DeclareLaunchArgument("runtime", default_value="fake", choices=["fake", "real"]),
+        DeclareLaunchArgument("i_understand_this_moves_real_hardware", default_value="false",
+                              choices=["true", "false"]),
+        DeclareLaunchArgument("real_config", default_value="",
+                              description="real settings (default config/leap_hand/leap_hand_real.yaml)"),
+        DeclareLaunchArgument("port", default_value="",
+                              description="this hand's U2D2, overrides <side>.port of real_config"),
         DeclareLaunchArgument("canonical_urdf", default_value=default_canonical_urdf(__file__)),
         DeclareLaunchArgument("manifest", default_value=""),
         DeclareLaunchArgument("check_ownership", default_value="true", choices=["true", "false"]),

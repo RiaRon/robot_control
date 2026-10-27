@@ -114,6 +114,14 @@ teleop:
         left: left_joint_trajectory_controller
       joint_states_topic: /openarm/joint_states
       controller_manager: /controller_manager
+    # openarm_leap_arms.launch.py runtime:=real: same controller names, arm joints named
+    # openarm_<side>_joint<N> (the binding reads that off the description).
+    real:
+      controllers:
+        right: right_joint_trajectory_controller
+        left: left_joint_trajectory_controller
+      joint_states_topic: /openarm/joint_states
+      controller_manager: /controller_manager
 
 # Neck (Dynamixel pan/tilt under the head camera), run by openarm_head.ros_head. Values
 # follow motion_acq's station head section. ★ port, ids, home and signs are NOT measured

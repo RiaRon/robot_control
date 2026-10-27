@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""OpenArm arms only, with the LEAP hands' geometry, under /controller_manager (fake).
+"""OpenArm arms only, with the LEAP hands' geometry, under /controller_manager.
 
 The split bringup's arm process, like openarm_rh56f1_arms.launch.py: one controller
 manager for both arms (14 joints), no hand resource. The description keeps both
@@ -20,7 +20,12 @@ The arms' joint_state_broadcaster publishes on ``/openarm/joint_states``. With
 runtime:=fake  mock_components/GenericSystem, right/left_joint_trajectory_controller
                active, then held once at their measured position
                (fake_trajectory_controller_prime.py) so they accept topic commands.
-There is no real runtime here yet.
+runtime:=real  openarm_hardware/OpenArmHW per arm with a CAN interface
+               (config/leap_hand/openarm_leap_arms_real.yaml or right/left_can_interface:=).
+               Needs i_understand_this_moves_real_hardware:=true. Arm joints carry their
+               OpenArmHW names (openarm_right_joint1 ...) in every description and on
+               /openarm/joint_states. Components and arm controllers start inactive:
+               launching enables no motor (activation: docs/leap_hand).
 """
 
 from pathlib import Path
@@ -43,7 +48,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # split_common, device_guard
-from device_guard import require_no_controller_manager  # noqa: E402
+from device_guard import hold_device_lock, require_no_controller_manager  # noqa: E402
 from leap_split_description import (  # noqa: E402
     ARM_CONTROLLERS,
     ARM_DESCRIPTION_TOPIC,
@@ -53,26 +58,46 @@ from leap_split_description import (  # noqa: E402
     default_canonical_urdf,
     default_manifest_for,
     description_nodes,
+    REAL_ARM_SETTINGS,
     fake_arm_controllers,
     fake_arm_description,
     prime_fake_trajectory_controllers,
+    real_arm_controllers,
+    real_arm_description,
+    real_arm_sides,
 )
 
 
 def _setup(context: LaunchContext):
     text = lambda name: context.perform_substitution(LaunchConfiguration(name))
-    if text("runtime") != "fake":
-        raise RuntimeError("openarm_leap_arms.launch.py has only runtime:=fake for now")
+    real = text("runtime") == "real"
+    if real and text("i_understand_this_moves_real_hardware").lower() != "true":
+        raise RuntimeError("runtime:=real drives the OpenArm motors: pass "
+                           "i_understand_this_moves_real_hardware:=true")
     if text("check_ownership").lower() == "true":
         require_no_controller_manager(ARM_NAMESPACE)
     canonical_urdf = Path(text("canonical_urdf"))
     manifest = Path(text("manifest")) if text("manifest") else default_manifest_for(canonical_urdf)
     manager = controller_manager(ARM_NAMESPACE)
-    description = fake_arm_description(canonical_urdf, manifest)
+    if real:
+        settings = yaml.safe_load(Path(text("real_config") or REAL_ARM_SETTINGS).read_text())
+        for side in ("right", "left"):
+            if text(f"{side}_can_interface"):
+                settings.setdefault(side, {})["can_interface"] = text(f"{side}_can_interface")
+        sides = real_arm_sides(settings)
+        for side in sides:  # one owner per CAN bus
+            hold_device_lock(f"can_{settings[side]['can_interface']}")
+        description = real_arm_description(canonical_urdf, manifest, settings)
+        controllers = real_arm_controllers(description, settings)
+        start_inactive = bool(settings.get("start_inactive", True))
+    else:
+        sides = ["left", "right"]
+        description = fake_arm_description(canonical_urdf, manifest)
+        controllers = fake_arm_controllers(manifest, description)
     with tempfile.NamedTemporaryFile(
         mode="w", prefix="openarm_leap_arms_controllers_", suffix=".yaml", delete=False
     ) as handle:
-        yaml.safe_dump(fake_arm_controllers(manifest, description), handle, sort_keys=False)
+        yaml.safe_dump(controllers, handle, sort_keys=False)
         controllers_file = handle.name
 
     nodes = [RegisterEventHandler(OnShutdown(
@@ -83,20 +108,29 @@ def _setup(context: LaunchContext):
                        ("/dynamic_joint_states", "/openarm/dynamic_joint_states")],
     })
     # One spawner per line: a failing controller must not stop the others.
-    arms = [ARM_CONTROLLERS["left"], ARM_CONTROLLERS["right"]]
-    for arguments in (["joint_state_broadcaster"], arms):
+    arms = [ARM_CONTROLLERS[s] for s in ("left", "right") if s in sides]
+    # Real arms starting inactive: their controllers are loaded inactive too (docs/leap_hand).
+    inactive = ["--inactive"] if real and start_inactive else []
+    for arguments in (["joint_state_broadcaster"], [*arms, *inactive]):
         nodes.append(Node(
             package="controller_manager",
             executable="spawner",
             arguments=[*arguments, "--controller-manager", manager],
         ))
-    nodes.append(prime_fake_trajectory_controllers(nodes[-1], manager, arms))
+    if not real:
+        nodes.append(prime_fake_trajectory_controllers(nodes[-1], manager, arms))
     return nodes
 
 
 def generate_launch_description():
     arguments = [
-        DeclareLaunchArgument("runtime", default_value="fake", choices=["fake"]),
+        DeclareLaunchArgument("runtime", default_value="fake", choices=["fake", "real"]),
+        DeclareLaunchArgument("i_understand_this_moves_real_hardware", default_value="false",
+                              choices=["true", "false"]),
+        DeclareLaunchArgument("real_config", default_value="",
+                              description="default config/leap_hand/openarm_leap_arms_real.yaml"),
+        DeclareLaunchArgument("right_can_interface", default_value="", description="overrides real_config"),
+        DeclareLaunchArgument("left_can_interface", default_value="", description="overrides real_config"),
         DeclareLaunchArgument("canonical_urdf", default_value=default_canonical_urdf(__file__),
                               description="Canonical openarm_leap_bi_rl.urdf (urdf repo)."),
         DeclareLaunchArgument("manifest", default_value="",
@@ -111,7 +145,8 @@ def generate_launch_description():
     model = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(Path(__file__).resolve().parent / "openarm_leap_model.launch.py")),
         launch_arguments={name: LaunchConfiguration(name) for name in
-                          ("canonical_urdf", "manifest", "use_rviz", "hand_display_placeholder")}.items(),
+                          ("canonical_urdf", "manifest", "runtime", "use_rviz",
+                           "hand_display_placeholder")}.items(),
         condition=IfCondition(LaunchConfiguration("start_model")),
     )
     return LaunchDescription(arguments + [OpaqueFunction(function=_setup), model])

@@ -18,8 +18,8 @@ ros:
   jazzy:
     command_rate_hz: 100
 # Arms: same OpenArm joints, limits and fake controllers as openarm_rh56f1
-# (openarm_leap_arms.launch.py runtime:=fake). No real arm runtime exists for
-# this asset yet, so no real controller is named. asset_tip_link is the LEAP
+# (openarm_leap_arms.launch.py). runtime:=real keeps the same controller names
+# over the OpenArmHW joint names (the teleop config names them). asset_tip_link is the LEAP
 # palm (r_hj_mount: r_al_7 -> r_hl_palm), the Quest teleop control frame.
 groups:
   openarm_right_arm:

@@ -1,4 +1,4 @@
-"""Descriptions and state ownership for the split OpenArm + LEAP Hand bringup (fake only).
+"""Descriptions and state ownership for the split OpenArm + LEAP Hand bringup.
 
 Same layout as the OpenArm + RH56F1 split bringup (../rh56f1):
 one controller manager per hardware owner,
@@ -16,7 +16,7 @@ The model is the canonical RL asset of the urdf repo
 model and the Isaac asset are one file. Nothing here edits a joint origin, axis,
 limit or inertial; only mesh URIs are re-rooted at this checkout. Joint names are
 canonical (``r_aj_1``, ``r_hj_index_1``); every LEAP joint is actuated (no mimic),
-so each hand owns all 16. There is no real hand backend yet.
+so each hand owns all 16. Real hands: the ROBOTIS Dynamixel plugin (real_hand_description).
 """
 
 from __future__ import annotations
@@ -122,10 +122,36 @@ def _to_text(root: ET.Element) -> str:
     return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
 
-def model_description(source_urdf: Path) -> str:
-    """The integrated model for the one robot_state_publisher: no ros2_control."""
+RUNTIMES = ("fake", "real")
+
+
+def arm_source_names(manifest: Path) -> dict[str, str]:
+    """canonical arm joint -> OpenArmHW name (``r_aj_1`` -> ``openarm_right_joint1``)."""
+    mapping = yaml.safe_load(Path(manifest).read_text()).get("source_to_canonical_joints") or {}
+    arms = set(device_joints(manifest)["arms"])  # not the fixed r_aj_base mounts
+    names = {c: s for s, c in mapping.items() if c in arms}
+    if len(names) != ARM_JOINTS:
+        raise ValueError(f"{manifest}: expected {ARM_JOINTS} arm source names")
+    return names
+
+
+def _runtime_model(source_urdf: Path, manifest: Path | None, runtime: str) -> ET.Element:
+    """Canonical model; for real, the arm joints carry their OpenArmHW names (the
+    plugin names its joints itself), so states, TF and commands all agree."""
+    if runtime not in RUNTIMES:
+        raise ValueError(f"runtime must be one of {RUNTIMES}, got {runtime!r}")
     root = canonical_model(source_urdf)
-    root.set("name", "openarm_leap_fake_model")
+    if runtime == "real":
+        names = arm_source_names(manifest or default_manifest_for(source_urdf))
+        for joint in root.findall("joint"):
+            joint.set("name", names.get(joint.get("name"), joint.get("name")))
+    return root
+
+
+def model_description(source_urdf: Path, manifest: Path | None = None, runtime: str = "fake") -> str:
+    """The integrated model for the one robot_state_publisher: no ros2_control."""
+    root = _runtime_model(source_urdf, manifest, runtime)
+    root.set("name", f"openarm_leap_{runtime}_model")
     for block in root.findall("ros2_control"):
         root.remove(block)
     return _to_text(root)
@@ -158,6 +184,171 @@ def fake_hand_description(side: str, source_urdf: Path, manifest: Path) -> str:
     if side not in SIDES:
         raise ValueError(f"side must be one of {SIDES}, got {side!r}")
     return _fake_description(source_urdf, f"leap_{side}_hand_fake", device_joints(manifest)[side])
+
+
+REAL_PLUGIN = "dynamixel_hardware_interface/DynamixelHardware"
+#: config/leap_hand/leap_hand_real.yaml, same relative place in the source tree and the install.
+REAL_SETTINGS = Path(__file__).resolve().parents[2] / "config" / "leap_hand" / "leap_hand_real.yaml"
+
+
+def load_real_settings(path: Path | None = None) -> dict:
+    return yaml.safe_load(Path(path or REAL_SETTINGS).read_text())
+
+
+def motor_joints(side: str, manifest: Path, swap: dict | None = None) -> list[tuple[int, str]]:
+    """(motor ID, canonical joint) of one hand, by ID: ``leap_<side>_<id>`` in the manifest.
+
+    *swap* ({id: id}, from ``motor_id_swap`` in leap_hand_real.yaml) exchanges the joints
+    of motor pairs, for a hand wired differently from the manifest.
+    """
+    mapping = yaml.safe_load(Path(manifest).read_text()).get("source_to_canonical_joints") or {}
+    prefix = f"leap_{side}_"
+    by_id = {int(source[len(prefix):]): joint for source, joint in mapping.items()
+             if source.startswith(prefix) and source[len(prefix):].isdigit()}
+    for a, b in (swap or {}).items():
+        a, b = int(a), int(b)
+        if a not in by_id or b not in by_id:
+            raise ValueError(f"motor_id_swap {a}<->{b}: no such motor")
+        by_id[a], by_id[b] = by_id[b], by_id[a]
+    motors = sorted(by_id.items())
+    if sorted(j for _, j in motors) != sorted(device_joints(manifest)[side]) \
+            or [i for i, _ in motors] != list(range(HAND_JOINTS)):
+        raise ValueError(f"{manifest}: leap_{side}_0..{HAND_JOINTS - 1} must map onto the "
+                         f"{side} hand's {HAND_JOINTS} control joints")
+    return motors
+
+
+def real_hand_description(side: str, source_urdf: Path, manifest: Path, settings: dict) -> str:
+    """Integrated model + one hand's 16 joints on the ROBOTIS Dynamixel plugin.
+
+    One transmission per motor, identity matrices: joint ``k`` is the motor with ID ``k``.
+    The plugin turns torque off at init (``disable_torque_at_init``) and enables it only
+    when the component is activated.
+    """
+    if side not in SIDES:
+        raise ValueError(f"side must be one of {SIDES}, got {side!r}")
+    port = str((settings.get(side) or {}).get("port") or "")
+    if not port:
+        raise ValueError(f"leap_hand_real.yaml: {side}.port is not set (the hand's U2D2)")
+    motors = motor_joints(side, manifest, settings.get("motor_id_swap"))
+    n = len(motors)
+    identity = ", ".join("1" if r == c else "0" for r in range(n) for c in range(n))
+    root = canonical_model(source_urdf)
+    name = f"leap_{side}_hand_real"
+    root.set("name", name)
+    block = ET.SubElement(root, "ros2_control", {"name": name, "type": "system"})
+    hardware = ET.SubElement(block, "hardware")
+    ET.SubElement(hardware, "plugin").text = REAL_PLUGIN
+    for key, value in {
+        "port_name": port,
+        "baud_rate": settings.get("baud_rate", 4000000),
+        "error_timeout_ms": settings.get("error_timeout_ms", 500),
+        "dynamixel_model_folder": "/param/dxl_model",
+        "number_of_joints": n,
+        "number_of_transmissions": n,
+        "transmission_to_joint_matrix": identity,
+        "joint_to_transmission_matrix": identity,
+        "disable_torque_at_init": "true",
+        "dynamixel_state_pub_msg_name": "dxl_state",
+        "get_dynamixel_data_srv_name": "get_dxl_data",
+        "reboot_dxl_srv_name": "reboot_dxl",
+    }.items():
+        ET.SubElement(hardware, "param", {"name": key}).text = str(value)
+    for _, joint_name in motors:
+        joint = ET.SubElement(block, "joint", {"name": joint_name})
+        ET.SubElement(joint, "command_interface", {"name": "position"})
+        for interface in ("position", "velocity", "effort"):
+            ET.SubElement(joint, "state_interface", {"name": interface})
+    for motor_id, _ in motors:
+        gpio = ET.SubElement(block, "gpio", {"name": f"leap_{side}_dxl{motor_id}"})
+        ET.SubElement(gpio, "param", {"name": "type"}).text = "dxl"
+        ET.SubElement(gpio, "param", {"name": "ID"}).text = str(motor_id)
+        ET.SubElement(gpio, "command_interface", {"name": "Goal Position"})
+        for interface in ("Present Position", "Present Velocity", "Present Current"):
+            ET.SubElement(gpio, "state_interface", {"name": interface})
+        for item, value in (settings.get("motor") or {}).items():
+            ET.SubElement(gpio, "param", {"name": item}).text = str(value)
+    return _to_text(root)
+
+
+def real_hand_controllers(side: str, manifest: Path, description: str, start_inactive: bool) -> dict:
+    """The fake hand's controllers, plus the component's initial state."""
+    params = _controllers(description, {FAKE_HAND_CONTROLLERS[side]: device_joints(manifest)[side]})
+    if start_inactive:
+        manager = params["/**/controller_manager"]["ros__parameters"]
+        manager["hardware_components_initial_state"] = {"inactive": [f"leap_{side}_hand_real"]}
+    return params
+
+
+REAL_ARM_SETTINGS = REAL_SETTINGS.with_name("openarm_leap_arms_real.yaml")
+REAL_ARM_PLUGIN = "openarm_hardware/OpenArmHW"
+
+
+def _control_gains() -> dict:
+    """openarm_description config/arm/v10/control_gains.yaml (installed, else this source tree)."""
+    relative = Path("config/arm/v10/control_gains.yaml")
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        path = Path(get_package_share_directory("openarm_description")) / relative
+    except Exception:  # not sourced: the source tree (ros_ws/src/openarm_description)
+        path = Path(__file__).resolve().parents[4] / "openarm_description" / relative
+    return yaml.safe_load(path.read_text())
+
+
+def real_arm_sides(settings: dict) -> list[str]:
+    sides = [s for s in SIDES if (settings.get(s) or {}).get("can_interface")]
+    if not sides:
+        raise ValueError("openarm_leap_arms_real.yaml: no arm enabled (set right/left can_interface)")
+    return sides
+
+
+def real_arm_description(source_urdf: Path, manifest: Path, settings: dict) -> str:
+    """Integrated model (arm joints renamed) + one OpenArmHW block per enabled arm."""
+    sides = real_arm_sides(settings)
+    gains = _control_gains()
+    root = _runtime_model(source_urdf, manifest, "real")
+    root.set("name", "openarm_leap_arms_real")
+    limits = {j.get("name"): j.find("limit") for j in root.findall("joint")}
+    for side in sides:
+        block = ET.SubElement(root, "ros2_control", {"name": f"openarm_leap_{side}_arm", "type": "system"})
+        hardware = ET.SubElement(block, "hardware")
+        ET.SubElement(hardware, "plugin").text = REAL_ARM_PLUGIN
+        params = {"can_interface": settings[side]["can_interface"], "arm_prefix": f"{side}_",
+                  "hand": "false", "can_fd": str(bool(settings.get("can_fd", True))).lower()}
+        params.update({k: str(v).lower() if isinstance(v, bool) else v
+                       for k, v in (settings.get("safety") or {}).items()})
+        for i in range(1, 8):
+            params[f"kp{i}"] = gains[f"joint{i}"]["kp"]
+        for i in range(1, 8):
+            params[f"kd{i}"] = gains[f"joint{i}"]["kd"]
+        for key, value in params.items():
+            ET.SubElement(hardware, "param", {"name": key}).text = str(value)
+        for i in range(1, 8):  # OpenArmHW exports openarm_<side>_joint1..7 in this order
+            name = f"openarm_{side}_joint{i}"
+            joint = ET.SubElement(block, "joint", {"name": name})
+            position = ET.SubElement(joint, "command_interface", {"name": "position"})
+            ET.SubElement(position, "param", {"name": "min"}).text = limits[name].get("lower")
+            ET.SubElement(position, "param", {"name": "max"}).text = limits[name].get("upper")
+            for interface in ("velocity", "effort"):
+                ET.SubElement(joint, "command_interface", {"name": interface})
+            for interface in ("position", "velocity", "effort", "temperature_rotor", "temperature_mos"):
+                ET.SubElement(joint, "state_interface", {"name": interface})
+    return _to_text(root)
+
+
+def real_arm_controllers(description: str, settings: dict) -> dict:
+    """Broadcaster + the fake bringup's controller names over the real joint names."""
+    sides = real_arm_sides(settings)
+    params = _controllers(description, {
+        ARM_CONTROLLERS[s]: [f"openarm_{s}_joint{i}" for i in range(1, 8)] for s in sides})
+    manager = params["/**/controller_manager"]["ros__parameters"]
+    manager["update_rate"] = int(settings.get("update_rate", 750))
+    if settings.get("start_inactive", True):
+        manager["hardware_components_initial_state"] = {"inactive": [f"openarm_leap_{s}_arm" for s in sides]}
+    for side in sides:
+        params[f"/**/{ARM_CONTROLLERS[side]}"]["ros__parameters"]["state_interfaces"] = ["position", "velocity"]
+    return params
 
 
 def _controllers(description: str, controllers: dict[str, list[str]]) -> dict:
@@ -201,10 +392,14 @@ def undriven_joints(manifest: Path) -> list[str]:
     return [n for n in data["kinematic_joint_order"] if n not in owned]
 
 
-def state_sources(manifest: Path) -> list[dict]:
+def state_sources(manifest: Path, runtime: str = "fake") -> list[dict]:
     """The merger's inputs: which topic owns which joints."""
     owned = device_joints(manifest)
-    sources = [{"id": "openarm", "topic": ARM_STATE_TOPIC, "joints": owned["arms"],
+    arms = owned["arms"]
+    if runtime == "real":
+        names = arm_source_names(manifest)
+        arms = [names[n] for n in arms]
+    sources = [{"id": "openarm", "topic": ARM_STATE_TOPIC, "joints": arms,
                 "display_placeholder": False}]
     for side in SIDES:
         # Fingers may be drawn at 0 while this hand has no fresh state; marked, never measured.

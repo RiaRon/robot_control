@@ -1,0 +1,29 @@
+# Wrist camera -> LEAP Hand (openarm_leap_tracking). Angles in degrees.
+#
+# robot = clamp(scale * (human - offset_deg), cap_deg) and also inside the URDF
+# limits. Caps are the friend's tested safe range on a real LEAP (jimin-kr/leap_hand,
+# right_hand_motor_map.json: close ticks - 2048): MCP 82.85, PIP 60, DIP 79.23,
+# spread +-10, thumb rotation 105, thumb PIP 30, thumb DIP 75.42.
+# ★ scale signs and offsets are first guesses: tune with the camera on the hand.
+
+joints:
+  mcp:     {scale: 1.0, offset_deg: 0.0, cap_deg: [0.0, 82.85]}   # <finger>_1
+  spread:  {scale: 1.0, offset_deg: 0.0, cap_deg: [-10.0, 10.0]}  # <finger>_2, + toward the thumb ★ sign
+  pip:     {scale: 1.0, offset_deg: 0.0, cap_deg: [0.0, 60.0]}    # <finger>_3
+  dip:     {scale: 1.0, offset_deg: 0.0, cap_deg: [0.0, 79.23]}   # <finger>_4
+  thumb_1: {scale: 1.0, offset_deg: 0.0, cap_deg: [0.0, 105.0]}   # rotation toward the palm
+  thumb_2: {scale: 1.0, offset_deg: 55.0, cap_deg: [-10.0, 30.0]} # abduction ★ offset = relaxed thumb
+  thumb_3: {scale: 1.0, offset_deg: 0.0, cap_deg: [0.0, 30.0]}
+  thumb_4: {scale: 1.0, offset_deg: 0.0, cap_deg: [0.0, 75.42]}
+
+# Per joint suffix, e.g. middle_2: {cap_deg: [0, 0]} to hold the middle finger's spread.
+overrides:
+  middle_2: {cap_deg: [0.0, 0.0]}
+
+filter:
+  alpha: 0.5          # exponential filter per camera frame
+  max_step_deg: 6.0   # per update; 180 deg/s at 30 Hz
+
+command:
+  rate_hz: 30.0
+  time_from_start_s: 0.1   # of each streamed trajectory point

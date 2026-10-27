@@ -23,6 +23,7 @@ where = ["src"]
 robot_control = ["profiles/*.yaml", "profiles/*/*.yaml"]
 openarm_quest_teleop = ["config/*/*.yaml"]
 openarm_quest_view = ["web/*"]
+openarm_leap_tracking = ["config/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

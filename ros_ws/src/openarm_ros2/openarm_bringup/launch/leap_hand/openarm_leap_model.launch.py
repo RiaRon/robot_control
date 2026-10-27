@@ -49,7 +49,7 @@ def _setup(context: LaunchContext):
     canonical_urdf = Path(text("canonical_urdf"))
     manifest = Path(text("manifest")) if text("manifest") else default_manifest_for(canonical_urdf)
     merger_arguments = [
-        "--sources", json.dumps(state_sources(manifest)),
+        "--sources", json.dumps(state_sources(manifest, text("runtime"))),
         "--merged-topic", MERGED_STATE_TOPIC,
         "--display-topic", DISPLAY_STATE_TOPIC,
         "--status-topic", SOURCE_STATUS_TOPIC,
@@ -63,7 +63,7 @@ def _setup(context: LaunchContext):
             executable="robot_state_publisher",
             name="robot_state_publisher",
             output="screen",
-            parameters=[{"robot_description": model_description(canonical_urdf)}],
+            parameters=[{"robot_description": model_description(canonical_urdf, manifest, text("runtime"))}],
             remappings=[("joint_states", DISPLAY_STATE_TOPIC)],
         ),
         Node(
@@ -91,6 +91,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("canonical_urdf", default_value=default_canonical_urdf(__file__)),
         DeclareLaunchArgument("manifest", default_value=""),
+        DeclareLaunchArgument("runtime", default_value="fake", choices=["fake", "real"],
+                              description="real: arm joints carry their OpenArmHW names"),
         DeclareLaunchArgument("use_rviz", default_value="false", choices=["true", "false"]),
         DeclareLaunchArgument("hand_display_placeholder", default_value="true",
                               choices=["true", "false"]),

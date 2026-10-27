@@ -15,8 +15,10 @@
 | 합성 헤드셋 → fake 목 (RViz에서 머리가 따라 돎) | **동작 확인됨.** 같은 테스트. 왼쪽 20° → `head_j_pan` −0.34 rad, 위 10° → `head_j_tilt` −0.17 rad |
 | 실제 Quest 3 (quest_view 페이지) → fake 로봇 | **아직 안 해 봄.** 헤드셋을 연결한 뒤 이 문서대로 확인한다 |
 | 실제 머리 카메라 영상 → 헤드셋 | **아직 안 해 봄.** 카메라가 이 PC에 연결되어 있지 않다 |
+| 손목 카메라 → LEAP 손가락 (10-5) | **fake 확인됨** (합성 손). 실제 카메라는 아직 |
+| 녹화 (10-6) | **fake 확인됨** (rosbag2 MCAP) |
 | 실물 목 (Dynamixel) | **아직 불가.** 포트·홈 각도·방향을 이 로봇에서 재지 않았다(9-3) |
-| 실물 OpenArm + LEAP | **아직 불가.** LEAP 손 실물 드라이버와 Jazzy용 실물 팔 실행 경로가 없다(13단계) |
+| 실물 OpenArm + LEAP | **코드 준비됨, 실물 확인 전.** 팔(OpenArmHW)·손(ROBOTIS) 실물 launch가 있고 플러그인 로딩까지 확인. CAN·U2D2·모터 ID 확인 필요(13단계) |
 
 ```text
 [Quest 3 브라우저: quest_view 페이지 (WebXR)]
@@ -295,11 +297,42 @@ dry run에서는 시작 자세로도 옮기지 않는다("would move to start po
 
 멈추면 `status`의 `reason`에 `IK failed: target not reachable` 등이 보인다. 손을 반대로 되돌리면 다시 따라온다. 녹화 때 문제없던 범위는 앞 10 cm, 바깥 6 cm, 아래 6 cm, 손목 ±20°, 반지름 5 cm 원이다.
 
+### 10-5. 손가락: 손목 카메라로 LEAP 손 조종
+조작자 손목에 단 카메라(친구 작업과 같은 D405 위치)로 손가락을 보고, MediaPipe 손 랜드마크를 LEAP 16관절로 바꿔 손 컨트롤러에 보낸다. 손(터미널 2)이 떠 있어야 한다.
+
+**한 번만: 전용 환경** (`.venv`와 따로. MediaPipe가 pink 쪽 패키지와 섞이지 않게)
+```bash
+python3 -m venv --without-pip --system-site-packages .venv-hand
+python3 -m pip --python .venv-hand/bin/python install mediapipe==1.1.1 pyyaml
+python3 -m pip --python .venv-hand/bin/python install --ignore-installed matplotlib   # apt matplotlib은 numpy 2와 안 맞음
+curl -L --create-dirs -o models/hand_landmarker.task \
+  https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+```
+
+**터미널 8**
+```bash
+.venv-hand/bin/python -m openarm_leap_tracking.ros_node --side right --camera 0            # 점검: 목표만 발행
+.venv-hand/bin/python -m openarm_leap_tracking.ros_node --side right --camera 0 --execute  # 손에 명령
+.venv-hand/bin/python -m openarm_leap_tracking.ros_node --side right --test --execute      # 카메라 없이 합성 손
+```
+- 시작 직후는 따라가지 않는다. **Space**로 따라가기 시작/멈춤, Esc로 끝낸다. 시작할 때 손의 현재 관절 각도에서 출발하므로 튀지 않는다.
+- 손이 화면에서 사라지면 마지막 목표를 유지한다(펴지지 않는다).
+- 목표는 항상 `/leap_hand_tracking/right/target`에 나온다(`ros2 topic echo`로 확인).
+- 한계: 친구가 실물에서 쓴 안전 범위(MCP 82.85°, PIP 60°, DIP 79.23°, 벌림 ±10°, 엄지 회전 105°). 설정은 `src/openarm_leap_tracking/config/hand_tracking.yaml`. 방향(scale 부호)과 엄지 벌림 기준(offset)은 카메라를 달고 맞춰야 한다(★).
+- fake 확인(10/27): 합성 손으로 fake 손이 따라 움직임. 손가락 최대 68°, PIP는 60°에서 멈춤, 벌림 ±8.6°, 한 번에 최대 0.5° 변화.
+
+### 10-6. 녹화
+```bash
+scripts/record_teleop.sh cup_grasp          # bags/<날짜_시간>_cup_grasp (MCAP), Ctrl-C로 끝
+ros2 bag info bags/<폴더>                     # 확인
+```
+관절 상태(팔·양손·목), Quest 입력(`/quest/*`), 원격조종 상태·목표, 손목 카메라 손 목표, 모든 팔·손 명령, TF와 모델을 기록한다. 카메라 영상은 ROS 토픽이 아니라서(quest_view가 카메라를 직접 읽음) 들어가지 않는다.
+
 ---
 
 ## 11. 매번: 끝내기
 
-1. grip을 놓는다.
+1. grip을 놓는다. 녹화 중이면 녹화 터미널 Ctrl-C, 손목 카메라(8)는 Space로 멈춘 뒤 Esc.
 2. 원격조종 터미널(6, 왼팔이면 그것도)에서 Ctrl-C
 3. 목(5) Ctrl-C: 홈으로 돌아간 뒤 끝난다
 4. 브리지(4) Ctrl-C
@@ -323,30 +356,56 @@ dry run에서는 시작 자세로도 옮기지 않는다("would move to start po
 
 ---
 
-## 13. 실물로 움직이기: 아직 불가
+## 13. 실물로 움직이기: 코드는 준비됨, 실물 확인 전
 
-### 13-1. 실물 전에 만들어야 하는 것
-| 항목 | 지금 | 필요한 작업 |
+### 13-1. 지금 상태 (2026-10-27)
+| 항목 | 상태 | 실물 전에 남은 일 |
 |---|---|---|
-| LEAP 손 실물 구동 | 없음 (fake만) | ROBOTIS `dynamixel_hardware_interface`(ros2_control, Jazzy apt), `leap_hand_description`에 ros2_control 파일, `leap_hand.launch.py runtime:=real` |
-| 팔 실물 구동 (Jazzy) | RH56F1용 Humble 방식만 있음 | `openarm_leap_arms.launch.py runtime:=real`. Jazzy는 description을 토픽으로 넘겨야 하고, 실물 팔 컨트롤러 이름과 시작 정책(비활성으로 띄우기)도 필요 |
-| 원격조종 실물 설정 | `quest_teleop_leap.yaml`에 fake만 있음 | `runtimes.real` 항목, profile의 실물 팔 컨트롤러 이름 |
-| 목 | fake만 확인 | 9-3의 값 측정 |
-| CAN 통신 빌드 | CLI11 설치됨(10/27 확인) | `openarm_can` 빌드, CAN-FD 어댑터가 연결된 PC |
+| LEAP 손 실물 | `leap_hand.launch.py runtime:=real` (ROBOTIS `dynamixel_hardware_interface`). 설정 `config/leap_hand/leap_hand_real.yaml`. 플러그인이 설정을 읽고 포트 열기까지 가는 것 확인(포트 없음에서 멈춤) | `sudo apt install ros-jazzy-dynamixel-hardware-interface`, 손 U2D2 포트, **모터 ID↔관절 확인**(아래 13-3) |
+| 팔 실물 | `openarm_leap_arms.launch.py runtime:=real` (OpenArmHW, Jazzy 빌드됨). 설정 `config/leap_hand/openarm_leap_arms_real.yaml`. 플러그인이 설정을 읽고 CAN 열기까지 가는 것 확인(CAN 없음에서 멈춤) | CAN-FD 어댑터와 인터페이스 이름(can0/can1) |
+| 원격조종 실물 | `quest_teleop_leap.yaml`에 `runtimes.real`. 실물 이름(`openarm_right_joint1`…)으로 묶이는 것 테스트 | 실물에서 방향 확인 |
+| 목 | fake 확인 | 9-3의 값 측정 |
 | 어댑터 | 임시값 (RH56F1 높이) | LEAP 어댑터 치수·질량 반영 후 모델 재생성 |
 
-### 13-2. 만들어진 뒤의 순서 (예정, RH56F1 실물 절차와 같은 구조)
-아래는 기존 RH56F1 실물 절차(`docs/rh56f1/quest-teleop.md` 6~8절, `docs/rh56f1/rh56f1-real-bringup.md`)를 LEAP에 옮긴 **예정 순서**다. 명령 이름은 구현 때 확정된다.
+실물 launch는 둘 다 `i_understand_this_moves_real_hardware:=true`가 없으면 거부한다. 하드웨어와 팔·손 컨트롤러는 **비활성(inactive)으로** 시작한다. 띄우기만 해서는 모터가 켜지지 않는다.
 
-1. **점검(preflight):** E-stop을 손 닿는 곳에 둔다. CAN 장치 확인, 주변을 비운다. 팔을 받칠 사람이나 거치대를 준비한다.
-2. **실물 팔 띄우기:** 모터는 비활성(inactive)으로 시작한다. 띄우는 것만으로는 움직이지 않는다.
-3. **읽기 전용 확인:** 관절 상태에 NaN이 없는지, TF가 나오는지 본다. 아무것도 움직이면 안 된다.
-4. **오른팔만 활성화:** 하드웨어를 active로 만들고 팔 컨트롤러를 켠다. 활성화 순간에는 측정 자세를 유지한다.
-5. 브리지를 켜고, **dry run**으로 `status`만 확인한다. 방향이 다르면 `axis_mapping` / `yaw_offset_deg`를 고친다.
-6. **실행:** 실물은 `--execute --confirm-real-hardware` **두 개가 다 있어야** 명령이 나간다. `--execute`만 주면 거부된다.
-7. 시작 자세 이동은 fake와 같다. 처음에는 `position_scale`을 0.3 정도로 낮추고 1~2 cm씩 움직인다.
+빌드(팔 드라이버 포함, 한 번):
+```bash
+cd ros_ws && source /opt/ros/jazzy/setup.bash
+colcon build --base-paths src/openarm_can src/openarm_ros2/openarm_hardware src/openarm_description src/openarm_ros2/openarm_bringup \
+  --packages-up-to openarm_hardware openarm_bringup --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+```
+`-DPython3_EXECUTABLE=/usr/bin/python3`는 이 PC에서 `~/.local`의 python3.12가 잡혀 CMake가 실패하는 것을 막는다.
 
-### 13-3. 실물에서 멈추는 방법 (기존 문서와 동일)
+### 13-2. 실물 순서 (팔 단독 → 손 → 원격조종 → 녹화)
+1. **점검:** E-stop을 손 닿는 곳에 둔다. 주변을 비우고, 팔을 받칠 사람이나 거치대를 준비한다.
+2. **팔 띄우기 (움직이지 않음):**
+   ```bash
+   ros2 launch openarm_bringup openarm_leap_arms.launch.py runtime:=real right_can_interface:=can0 \
+     i_understand_this_moves_real_hardware:=true use_rviz:=true
+   ```
+3. **읽기 전용 확인:** `ros2 control list_hardware_components`가 `inactive`, `/openarm/joint_states`에 NaN이 없고 RViz 팔 자세가 실제와 같은지 본다.
+4. **오른팔 활성화:** 받친 상태에서
+   ```bash
+   ros2 control set_hardware_component_state openarm_leap_right_arm active
+   ros2 control set_controller_state right_joint_trajectory_controller active
+   ```
+5. 브리지 → 원격조종 **dry run**(`--runtime real`)으로 `status`만 본다.
+6. **실행:** `--runtime real --execute --confirm-real-hardware`. 둘 중 하나라도 없으면 거부된다. 처음에는 `position_scale` 0.3, 1~2 cm씩.
+7. **손:** 아래 13-3을 먼저 하고, 손 launch → 손 하드웨어·컨트롤러 활성화 → 손목 카메라(10-5) 점검 모드 → `--execute`.
+8. **녹화:** 10-6.
+
+### 13-3. 손 실물 첫 연결
+```bash
+ros2 launch openarm_bringup leap_hand.launch.py side:=right runtime:=real \
+  port:=/dev/serial/by-id/usb-FTDI_..._<serial>-if00-port0 i_understand_this_moves_real_hardware:=true
+```
+- 시작할 때 플러그인이 모든 모터의 토크를 끄고(켜져 있으면 끈다) 설정값(전류 기반 위치 모드, P 600 / D 200, 전류 한계 350 mA)을 쓴다. 하드웨어는 inactive로 남는다.
+- **모터 ID↔관절 확인(★):** 활성화 전에 손가락 하나씩 손으로 움직이며 `/leap_right/joint_states`에서 어느 관절 값이 바뀌는지 본다. manifest는 ID 0/4/8 = 벌림, 1/5/9 = 굽힘(LEAP URDF)인데, 친구 손은 반대로 측정됐다. 반대면 `leap_hand_real.yaml`에 `motor_id_swap: {0: 1, 4: 5, 8: 9}`.
+- 확인 후 `ros2 control set_hardware_component_state leap_right_hand_real active` (이때 토크가 켜진다), `ros2 control set_controller_state right_hand_trajectory_controller active`.
+- 플러그인이 비활성 상태에서도 상태를 읽는지, 토크가 활성화 때만 켜지는지는 실물에서 처음 확인한다(문서와 코드로는 그렇게 보이지만 확인 전).
+
+### 13-4. 실물에서 멈추는 방법 (기존 문서와 동일)
 | 동작 | 결과 |
 |---|---|
 | grip을 놓는다 | 명령 중지, 팔은 마지막 위치 유지(토크 유지) |

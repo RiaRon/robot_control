@@ -190,3 +190,16 @@ def test_the_rh56f1_config_names_no_start_pose():
     from openarm_quest_teleop.config import start_pose_settings
 
     assert start_pose_settings(load_config(RH56F1_CONFIG))["name"] is None
+
+
+def test_the_teleop_binds_to_the_real_arm_description_by_source_names(setup):
+    """openarm_leap_arms.launch.py runtime:=real: OpenArmHW names, same palm, real plugin."""
+    config, profile, _ = setup
+    settings = yaml.safe_load(leap.REAL_ARM_SETTINGS.read_text())
+    settings["right"] = {"can_interface": "can0"}
+    real = leap.real_arm_description(CANONICAL, leap.default_manifest_for(Path(CANONICAL)), settings)
+    binding = bind_arm(real, profile, config, "right")
+    assert binding.naming == "source" and not binding.is_fake
+    assert binding.runtime_names == tuple(f"openarm_right_joint{i}" for i in range(1, 8))
+    assert binding.control_frame == "r_hl_palm"
+    assert config["teleop"]["runtimes"]["real"]["controllers"]["right"] == leap.ARM_CONTROLLERS["right"]

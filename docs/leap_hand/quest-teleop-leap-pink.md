@@ -135,7 +135,7 @@ probe는 quest_view를 테스트 화면으로 띄우고 실제와 겹치지 않�
 ## 5. 아직 없는 것
 
 - 실제 Quest 헤드셋 확인, 실제 머리 카메라 영상, 실물 목(포트·ID·홈·방향 측정)
-- real 런타임 (팔 real launch의 Jazzy 대응, LEAP Dynamixel ros2_control)
-- 손가락 원격조종 (Quest 손 추적 또는 글러브 → LEAP 16관절)
+- real 런타임의 실물 확인. 코드는 있다(2026-10-27): `openarm_leap_arms.launch.py runtime:=real`(OpenArmHW), `leap_hand.launch.py runtime:=real`(ROBOTIS), 설정 `runtimes.real`. 순서는 `leap-quest-teleop-guide.md` 13절.
+- 손가락: 손목 카메라 → LEAP(`src/openarm_leap_tracking`, 가이드 10-5)는 fake에서만 확인. 실제 카메라로 방향·기준 조정 필요.
 - Humble 컨테이너 회귀(`tests/run_humble_*.sh`)의 이미지에는 pink가 없어, 그 안의 Quest teleop probe는 pink를 설치하기 전까지 실패한다.
 - `.rosdistro`는 아직 `humble`이다. profile의 `endpoint()`는 humble 항목을 읽지만, LEAP profile은 humble과 jazzy에 같은 값(100 Hz)을 두었다.
